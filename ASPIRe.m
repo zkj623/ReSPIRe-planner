@@ -1,4 +1,4 @@
-% unknown map version
+% point cloud map version
 
 % clc 
 clear % clear global variables
