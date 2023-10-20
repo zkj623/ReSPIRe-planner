@@ -104,8 +104,8 @@ for ii = 1:sim_len
     %% target position estimation
     rbt.y = rbt.sensorGen(fld);
 
-    ranges = zeros(50,1);
-    angles = linspace(-pi/4,pi/4,50);
+    ranges = zeros(100,1);
+    angles = linspace(-pi,pi,100);
     maxrange = 8;
 
     intsectionPts = rayIntersection(fld.map.occ_map,rbt.state(1:3)',angles,maxrange,0.8);
@@ -122,6 +122,29 @@ for ii = 1:sim_len
     scan = lidarScan(ranges,angles);
 
     insertRay(rbt.map.occ_map,rbt.state(1:3)',scan,maxrange);
+
+%{
+
+    cart_tmp = zeros(50,2);
+    cart_tmp(:,1) = scan.Cartesian(:,1)*cos(rbt.state(3))-scan.Cartesian(:,2)*sin(rbt.state(3));
+    cart_tmp(:,2) = scan.Cartesian(:,1)*sin(rbt.state(3))+scan.Cartesian(:,2)*cos(rbt.state(3));
+    cart_tmp = cart_tmp + rbt.state(1:2)';
+    scan_tmp = lidarScan(cart_tmp);
+
+    scan_tmp = lidarScan(ranges,angles);
+%}
+
+    %scan = lidarScan(ranges,angles+rbt.state(3));
+    if ii ~= 1
+        relPose = [0 0 rbt.traj(3,end)-rbt.traj(3,end-21)];
+        angle = atan2(rbt.traj(2,end)-rbt.traj(2,end-21),rbt.traj(1,end)-rbt.traj(1,end-21))-rbt.traj(3,end-21);
+        dist = norm(rbt.traj(1:2,end)-rbt.traj(1:2,end-21));
+        relPose(1) = dist*cos(angle);
+        relPose(2) = dist*sin(angle);
+        addScan(rbt.map.PC_map,scan,relPose);
+    else
+        addScan(rbt.map.PC_map,scan,[0 0 0]);
+    end
 
     rbt.map.region = occupancyMatrix(rbt.map.occ_map);
 
@@ -211,12 +234,6 @@ for ii = 1:sim_len
     clf
     
     % (TODO:changliu): need to add a useful termination condition
-    % terminating condition
-%     if trace(rbt.P) <= 1 && norm(fld.target.pos-rbt.est_pos) <= 2 && norm(rbt.state(1:2)-target.pos) <= 3
-%         display('target is localized')
-%         break
-%     end     
-   %}
 
     if rbt.is_tracking
     time_tracking(tt) = time_tracking(tt) + t;

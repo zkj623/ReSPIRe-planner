@@ -139,6 +139,7 @@ map.region = zeros(50,50);
 map.region_exp = zeros(50,50);
 map.V = zeros(50,50,50,50);
 map.occ_map = occupancyMap(50,50,1);
+map.PC_map = lidarscanmap;
 inPara_rbt.map = map;
 
 % sensor
