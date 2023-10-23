@@ -52,7 +52,8 @@ save_video = true;
 
 % target.pos = [10;20];
 %target.pos = [targetPose(tt,1,1);targetPose(tt,1,2);targetPose(tt,1,3)];
-target.pos = [45;46;0];
+%target.pos = [45;46;0];
+target.pos = [5;46;0];
 
 switch tar_model
     case 'static'
@@ -144,7 +145,7 @@ inPara_rbt.map = map;
 % sensor
 % (TODO:changliu) needs further revision
 inPara_rbt.sensor_type = sensor_type;
-inPara_rbt.theta0 = pi/2; 
+inPara_rbt.theta0 = 100/180*pi; 
 inPara_rbt.minrange = 1;%15 4.5;
 inPara_rbt.maxrange = 8;
 
@@ -183,13 +184,14 @@ inPara_rbt.N = 100;
 
 switch prior_case
     case 'unimodal'
-        %
+        %{
         xMin=0;xMax=50;yMin=0;yMax=50;
         [X,Y] = meshgrid((xMin+1):5:(xMax-1),(yMin+1):5:(yMax-1));%返回二维网格坐标（每一个坐标代表一个particle）,25^2=625个particles
         inPara_rbt.particles = [X(:),Y(:)]';%2*N的矩阵，particles(:,i)表示第i个particle的坐标(x,y)
         inPara_rbt.particles = [inPara_rbt.particles;zeros(1,size(inPara_rbt.particles,2))];
         %}
-        %inPara_rbt.particles = mvnrnd(target.pos,[100 0 0;0 100 0;0 0 0.005],inPara_rbt.N)';
+        %inPara_rbt.particles = mvnrnd(target.pos-[10;10;0],[100 0 0;0 100 0;0 0 0.005],inPara_rbt.N)';
+        inPara_rbt.particles = mvnrnd([10;30;0],[100 0 0;0 100 0;0 0 0.005],inPara_rbt.N)';
     case 'multimodal'
         noise1 = zeros(1,3);
         noise1(1) = noise_point(tt,1,1);
