@@ -484,7 +484,7 @@ classdef RobotClass
             if is_tracking
                 max_depth = 4;
             else
-                max_depth = 60;
+                max_depth = 10;
             end
             %discount factor
             if is_tracking

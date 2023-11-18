@@ -1,4 +1,4 @@
-% point cloud map version
+% point cloud map + new algorithm
 
 % clc 
 clear % clear global variables
