@@ -63,7 +63,10 @@ classdef SimClass
 
             plot(fld.target.traj(1:ii+1,1),fld.target.traj(1:ii+1,2),'-','Color',[0.13333 0.5451 0.13333],LineWidth=3);
             plot(rbt.traj(1,1:end-1),rbt.traj(2,1:end-1),'-','Color','r',MarkerSize=0.1,LineWidth=3);
-
+            if ~isempty(rbt.planned_traj)
+                plot(rbt.planned_traj(1,1:end),rbt.planned_traj(2,1:end),'-','Color','g',MarkerSize=0.1,LineWidth=3);
+            end
+            
             plot(fld.target.traj(ii+1,1),fld.target.traj(ii+1,2),"pentagram",'Color',[0.13333 0.5451 0.13333],'MarkerFaceColor',[0.13333 0.5451 0.13333],MarkerSize=15);
             plot(rbt.state(1),rbt.state(2),'ro',MarkerFaceColor='r',MarkerSize=15);
 
@@ -75,10 +78,17 @@ classdef SimClass
             subplot(1,2,2);
             hold on
 
-            show(rbt.map.PC_map);
-            hold on
+            plot(rbt.map.PC_map(1,:),rbt.map.PC_map(2,:),'.','Color',[0 0 0.5]);
 
-            %axis([-pose_initial(1),50-pose_initial(1),-pose_initial(2),50-pose_initial(2)]);
+            %{
+            tic
+            PC_tree = KDTreeSearcher(rbt.map.PC_map');
+
+            [~,D] = knnsearch(PC_tree,rbt.state(1:2)');
+            toc
+            theta=linspace(-pi,pi);
+            plot(rbt.state(1)+D*cos(theta),rbt.state(2)+D*sin(theta),'LineStyle','--',LineWidth=1);
+            %}
 
             %{
             for jj = 1:size(rbt.particles,2)
@@ -89,29 +99,47 @@ classdef SimClass
             end
             %}
 
-            plot(rbt.particles(1,:)-rbt.traj(1,1),rbt.particles(2,:)-rbt.traj(2,1),'.','Color',[0 1 0.5]);
-            plot(rbt.est_pos(1)-rbt.traj(1,1),rbt.est_pos(2)-rbt.traj(2,1),"^",'Color','r','MarkerFaceColor','r',MarkerSize=15);
+            plot(rbt.particles(1,:),rbt.particles(2,:),'.','Color',[0 1 0.5]);
+            plot(rbt.est_pos(1),rbt.est_pos(2),"^",'Color','r','MarkerFaceColor','r',MarkerSize=15);
+
+            if ~rbt.is_tracking
+                for jj = 1:size(rbt.first_particles,2)
+                    plot(rbt.first_particles(1,jj),rbt.first_particles(2,jj),'.m',MarkerSize=ceil(100*rbt.first_w(jj)));
+                end
+            end
 
             %plot(fld.target.traj(1:ii+1,1),fld.target.traj(1:ii+1,2),'-','Color',[0.13333 0.5451 0.13333],LineWidth=3);
-            %plot(rbt.traj(1,1:end-1),rbt.traj(2,1:end-1),'-','Color','r',MarkerSize=0.1,LineWidth=3);
+            plot(rbt.traj(1,1:end-1),rbt.traj(2,1:end-1),'-','Color','r',MarkerSize=0.1,LineWidth=3);
+            if ~isempty(rbt.planned_traj)
+                plot(rbt.planned_traj(1,1:end),rbt.planned_traj(2,1:end),'-','Color','g',MarkerSize=0.1,LineWidth=3);
+            end
 
-            plot(fld.target.traj(ii+1,1)-rbt.traj(1,1),fld.target.traj(ii+1,2)-rbt.traj(2,1),"pentagram",'Color',[0.13333 0.5451 0.13333],'MarkerFaceColor',[0.13333 0.5451 0.13333],MarkerSize=15);
-            plot(rbt.state(1)-rbt.traj(1,1),rbt.state(2)-rbt.traj(2,1),'ro',MarkerFaceColor='r',MarkerSize=15);
+            plot(fld.target.traj(ii+1,1),fld.target.traj(ii+1,2),"pentagram",'Color',[0.13333 0.5451 0.13333],'MarkerFaceColor',[0.13333 0.5451 0.13333],MarkerSize=15);
+            plot(rbt.state(1),rbt.state(2),'ro',MarkerFaceColor='r',MarkerSize=15);
 
-            rbt.drawFOV(rbt.state+[-rbt.traj(1,1);-rbt.traj(2,1);0;0],fld,'cur',[0.9290 0.6940 0.1250]);
-            rbt.drawFOV_red(rbt.state+[-rbt.traj(1,1);-rbt.traj(2,1);0;0],fld,'cur',[1 0 1]);
+            %{
+            for jj = 1:length(rbt.tree)
+                if rbt.tree(jj).a_num ~= 0
+                    state = rbt.tree(jj).state;
+                    plot(state(1),state(2),'.c',MarkerSize=10);
+                end
+            end
+            %}
 
-            text(rbt.state(1),rbt.state(2)+2,num2str(rbt.value_max));
+            rbt.drawFOV(rbt.state,fld,'cur',[0.9290 0.6940 0.1250]);
+            rbt.drawFOV_red(rbt.state,fld,'cur',[1 0 1]);
+
+            text(rbt.state(1)-2,rbt.state(2)-2,num2str(rbt.value_max));
             %             axis equal;
             %             set(gca,'FontSize',40);
             %             box on;
             %
-            xticks(-rbt.traj(1,1):10:50-rbt.traj(1,1));
+            xticks(0:10:50);
             xticklabels({'0','10','20','30','40','50'});
-            yticks(-rbt.traj(2,1):10:50-rbt.traj(2,1));
+            yticks(0:10:50);
             yticklabels({'0','10','20','30','40','50'});
             axis equal;
-            axis([-rbt.traj(1,1),50-rbt.traj(1,1),-rbt.traj(2,1),50-rbt.traj(2,1)]);
+            axis([0,50,0,50]);
 
             drawnow limitrate
         end

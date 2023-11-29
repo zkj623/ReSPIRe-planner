@@ -7,6 +7,7 @@ classdef RobotClass
     properties
         % motion specs
         traj;
+        planned_traj;
         state; % [x;y;theta;v]
         a_lb;
         a_ub;
@@ -21,6 +22,10 @@ classdef RobotClass
         theta0; % sensor range in angle
         rmin; % sensor range minimum
         rmax; % sensor range maximum
+
+        ranges;
+        angles;
+
         inFOV_hist; 
         is_tracking;
 
@@ -46,6 +51,12 @@ classdef RobotClass
         particles; % array of particle positions [x;y]
         w; % particles' weight
         N; % particles' number
+
+        first_particles;
+        first_w;
+        hgrid;
+        tree;
+        allstate;
         
         % map
         map;
@@ -79,6 +90,7 @@ classdef RobotClass
         function this = RobotClass(inPara)
             this.state = inPara.state;
             this.traj = inPara.traj;
+            this.planned_traj = inPara.planned_traj;
             this.a_lb = inPara.a_lb;
             this.a_ub = inPara.a_ub;
             this.w_lb = inPara.w_lb;
@@ -95,6 +107,9 @@ classdef RobotClass
             this.rmin = inPara.minrange;
             this.rmax = inPara.maxrange;
             this.mdim = inPara.mdim;
+
+            this.ranges = inPara.ranges;
+            this.angles = inPara.angles;
 
             this.inFOV_hist = inPara.inFOV_hist; 
             this.is_tracking = inPara.is_tracking;
@@ -114,6 +129,12 @@ classdef RobotClass
             this.particles = inPara.particles;
             this.w = inPara.w;
             this.N = inPara.N;
+
+            this.first_particles = inPara.first_particles;
+            this.first_w = inPara.first_w;
+            this.hgrid = inPara.hgrid;
+            this.tree = inPara.tree;
+            this.allstate = inPara.allstate;
 
             this.map = inPara.map;
 
@@ -348,6 +369,11 @@ classdef RobotClass
             R = this.R;
             h = this.h;
             N = size(particles,2);
+            if this.is_tracking
+                Q = fld.target.Q_tracking;
+            else
+                Q = fld.target.Q_search;
+            end
 
             % particles = f(particles);
             % particles = (mvnrnd(particles',Q))';
@@ -362,7 +388,7 @@ classdef RobotClass
             particles = (mvnrnd(particles',fld.target.Q))';
                 %}
                 %particles(1:2,:) = particles(1:2,:) -1 + 2*[rand;rand];
-                particles = (mvnrnd(particles',fld.target.Q))';
+                particles = (mvnrnd(particles',Q))';
             end
 
             FOV = this.inFOV(state,particles(1:2,:));
@@ -385,7 +411,8 @@ classdef RobotClass
                     w(jj) = 10^-20;
                     continue
                 end
-                if this.map.region(ceil(particles(1,jj)),ceil(particles(2,jj))) < 0.3
+                [~,D] = knnsearch(this.map.PC_tree,particles(1:2,jj)');
+                if D < 0.5
                     w(jj) = 10^-20;
                     continue
                 end
@@ -453,7 +480,7 @@ classdef RobotClass
         end
 
         %% planning
-        function [this,optz,list_tmp] = Planner(this,fld,sim,plan_mode,list_tmp,ps,pt,tt,ii)
+        function [this,optz] = Planner(this,fld,sim,plan_mode,ps,pt,tt,ii)
 
             is_tracking = this.is_tracking;
 
@@ -465,7 +492,7 @@ classdef RobotClass
                 interpolated_points = this.int_pts_T;
             end
            
-            list_tmp = [];
+            tree = [];
             root = Node_IMPFT;
             %Initialization
             root.num = 1;
@@ -479,7 +506,8 @@ classdef RobotClass
             root.children_maxnum = 18;
             root.is_terminal = 0;
             root.delete = 0;
-            list_tmp = [list_tmp,root];
+            tree = [tree,root];
+            this.allstate = [];
 
             if is_tracking
                 max_depth = 4;
@@ -497,14 +525,14 @@ classdef RobotClass
             if is_tracking
                 planlen = 30;
             else
-                planlen = 30;
+                planlen = 50;
             end
 
             B = this.particles;
             w = this.w;
 
             for jj = 1:planlen
-                [list_tmp,Reward,num] = this.simulate(fld,sim,1,num,list_tmp,max_depth,eta,ii+1,tt,interpolated_points,a,B,w,pt,ps);
+                [this,tree,Reward,num] = this.simulate(fld,sim,1,num,tree,max_depth,eta,ii+1,tt,interpolated_points,a,B,w,pt,ps);
             end
             %}
             %{
@@ -516,36 +544,54 @@ classdef RobotClass
         end
             %}
 
+            this.tree = tree;
+            this.planned_traj = [];
+
             max_value = -10000;
-            if isempty(list_tmp(1).children)
-                optz = this.state;
-            else
-                val = zeros(length(list_tmp(1).children),1);
-                for jj = 1:length(list_tmp(1).children)
-                    val(jj) = list_tmp(list_tmp(1).children(jj)).Q;
-                end
-                [value_max,maxid] = max(val);
+            if isempty(tree(1).children)
+                [~,idd] = min(this.ranges);
                 %{
-                if value_max == 0
-                    optz = this.state;
-                    this.traj = [this.traj repmat(optz(1:3),1,21)];
-                else
-                    opt = list_tmp(1).children(maxid);
-                    optz = list_tmp(opt).state;
-                    id = list_tmp(opt).a_num;
-                    z = this.state;
-                    if is_tracking
-                        p = pt{id};
-                    else
-                        p = ps{id};
+                for jj = 1:size(this.ranges,1)
+                    if this.ranges(jj) == this.rmax+0.1
+                        idd = jj;
+                        break
                     end
-                    this.traj = [this.traj [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)']];
                 end
                 %}
-                %
-                opt = list_tmp(1).children(maxid);
-                optz = list_tmp(opt).state;
-                id = list_tmp(opt).a_num;
+                z = this.state;
+
+                if idd > size(this.ranges,1)/2
+                    id = 6;
+                else
+                    id = 7;
+                end
+
+                if is_tracking
+                    p = pt{id};
+                else
+                    p = ps{id};
+                end
+                
+                this.traj = [this.traj [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2]];
+                this.planned_traj = [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2];
+                optz = this.planned_traj(:,end);
+
+%                 if idd < size(this.ranges,1)/2
+%                     optz = this.state+[0;0;pi/4;0];
+%                 else
+%                     optz = this.state+[0;0;-pi/4;0];
+%                 end
+                value_max = 0;
+            else
+                %% planning horizon 1
+                val = zeros(length(tree(1).children),1);
+                for jj = 1:length(tree(1).children)
+                    val(jj) = tree(tree(1).children(jj)).Q;
+                end
+                [value_max,maxid] = max(val);
+                opt = tree(1).children(maxid);
+                optz = tree(opt).state;
+                id = tree(opt).a_num;
                 z = this.state;
                 if is_tracking
                     p = pt{id};
@@ -553,6 +599,48 @@ classdef RobotClass
                     p = ps{id};
                 end
                 this.traj = [this.traj [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2]];
+                this.planned_traj = [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2];
+
+                %% planning horizon 2
+                if ~isempty(tree(opt).children)
+                    opt = tree(opt).children(1);
+                    if ~isempty(tree(opt).children)
+                        val = zeros(length(tree(opt).children),1);
+                        for jj = 1:length(tree(opt).children)
+                            val(jj) = tree(tree(opt).children(jj)).Q;
+                        end
+                        z = tree(opt).state;
+                        [~,maxid] = max(val);
+                        opt = tree(opt).children(maxid);
+                        id = tree(opt).a_num;
+                        if is_tracking
+                            p = pt{id};
+                        else
+                            p = ps{id};
+                        end
+                        this.planned_traj = [this.planned_traj [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2]];
+                    end
+                end
+
+                 %% planning horizon 3
+%                 if ~isempty(list_tmp(opt).children)
+%                     val = zeros(length(list_tmp(opt).children),1);
+%                     for jj = 1:length(list_tmp(opt).children)
+%                         val(jj) = list_tmp(list_tmp(opt).children(jj)).Q;
+%                     end
+%                     z = list_tmp(opt).state;
+%                     %z = this.planned_traj(:,end);
+%                     [~,maxid] = max(val);
+%                     opt = list_tmp(opt).children(maxid);
+%                     id = list_tmp(opt).a_num;
+%                     if is_tracking
+%                         p = pt{id};
+%                     else
+%                         p = ps{id};
+%                     end
+%                     this.planned_traj = [this.planned_traj [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2]];
+%                 end
+
                 %}
             end
             this.value_max = value_max;
@@ -561,11 +649,11 @@ classdef RobotClass
         end
 
         %% policy tree construction
-        function [list_tmp,Reward,num] = simulate(this,fld,sim,begin,num,list_tmp,depth,eta,simIndex,tt,interpolated_points,a,B,w,pt,ps) 
+        function [this,list_tmp,Reward,num] = simulate(this,fld,sim,begin,num,list_tmp,depth,eta,simIndex,tt,interpolated_points,a,B,w,pt,ps) 
             if this.is_tracking
                 K = 3;
             else
-                K = 1;
+                K = 0.5;
             end
             alpha = 0.1;
             control = [fld.target.control(tt,simIndex,1);fld.target.control(tt,simIndex,2)];
@@ -587,12 +675,12 @@ classdef RobotClass
                         if begin ~= 0
                             list_tmp(begin).children(find(list_tmp(begin).children==begin_tmp))=[];
                         end
-                        Reward = -100;
+                        Reward = 0;
                         return
                     end
                 else
                     num = num + 1;
-                    [list_tmp,begin,flag2] = this.expand(fld,sim,begin,num,list_tmp,0,1,interpolated_points,a,pt,ps);
+                    [this,list_tmp,begin,flag2] = this.expand(fld,sim,begin,num,list_tmp,0,1,interpolated_points,a,pt,ps);
                     if flag2 == 0
                         num = num - 1;
                         if ~isempty(list_tmp(begin).children)
@@ -603,7 +691,7 @@ classdef RobotClass
                             if begin ~= 0
                                 list_tmp(begin).children(find(list_tmp(begin).children==begin_tmp))=[];
                             end
-                            Reward = -100;
+                            Reward = 0;
                             return
                         end
                     end
@@ -611,7 +699,7 @@ classdef RobotClass
                 
                 num_a = begin;
 
-                %
+                %{
                 id = list_tmp(num_a).a_num;
                 if this.is_tracking
                     p = pt{id};
@@ -651,7 +739,11 @@ classdef RobotClass
                 B = (mvnrnd(B',fld.target.Q))';
                 %}
                 %B(1:2,:) = B(1:2,:) -1 + 2*[rand;rand];
-                B = (mvnrnd(B',fld.target.Q))';
+                if this.is_tracking
+                    B = (mvnrnd(B',fld.target.Q_tracking))';
+                else
+                    B = (mvnrnd(B',fld.target.Q_search))';
+                end
 
                 % feasible particles
                 jj = 1;
@@ -674,6 +766,12 @@ classdef RobotClass
                 else
                     reward = this.MI(fld,sim,list_tmp(num_a).state,B,w);
                 end
+
+                %
+                dist_all = vecnorm(z(1:2)-this.first_particles(1:2,:));
+                [~,id] = min(dist_all);
+                reward = reward + 0.1/norm(state(1:2)-this.first_particles(1:2,id));
+                %}
 
                 if length(list_tmp(begin).children) <= K*(list_tmp(begin).N^alpha)
                     B_tmp = B;
@@ -711,7 +809,7 @@ classdef RobotClass
                         end
                     end
                     num = num + 1;
-                    [list_tmp,begin] = this.expand(fld,sim,begin,num,list_tmp,o,2,interpolated_points,a,pt,ps);
+                    [this,list_tmp,begin] = this.expand(fld,sim,begin,num,list_tmp,o,2,interpolated_points,a,pt,ps);
                     flag = 1;
                 else
                     begin = list_tmp(begin).children(randperm(length(list_tmp(begin).children),1));
@@ -725,16 +823,37 @@ classdef RobotClass
                 end
                 if flag == 1
                     node = list_tmp(begin);
-                    simIndex = simIndex + 1;
-                    rollout = this.rollOut(fld,sim,node,eta,depth-1,B,w,simIndex,tt);
+                    %{
+                        simIndex = simIndex + 1;
+                        rollout = this.rollOut(fld,sim,node,eta,depth-1,B,w,simIndex,tt,pt,ps);
+                    %}
+                    %
+                    if isempty(this.allstate)
+                        simIndex = simIndex + 1;
+                        rollout = this.rollOut(fld,sim,node,eta,depth-1,B,w,simIndex,tt,pt,ps);
+                        this.allstate = [this.allstate [node.state(1:3);begin]];
+                        list_tmp(begin).r = rollout;
+                    else
+                        [Idx,D] = knnsearch(this.allstate(1:2,:)',node.state(1:2)');
+                        if D < 1 && begin ~= this.allstate(4,Idx) %&& norm(this.allstate(3,Idx)-node.state(3)) < pi
+                            rollout = list_tmp(this.allstate(4,Idx)).r;
+                        else
+                            simIndex = simIndex + 1;
+                            rollout = this.rollOut(fld,sim,node,eta,depth-1,B,w,simIndex,tt,pt,ps);
+                            this.allstate = [this.allstate [node.state(1:3);begin]];
+                            list_tmp(begin).r = rollout;
+                        end
+                    end
+                    %}
 
-%                     if this.is_tracking
-%                         rollout = 0;
-%                     end
+                   
+                    %                     if this.is_tracking
+                    %                         rollout = 0;
+                    %                     end
                     Reward = reward + eta*rollout;
                 else
                     simIndex = simIndex + 1;
-                    [list_tmp,Reward,num] = this.simulate(fld,sim,begin,num,list_tmp,depth-1,eta,simIndex,tt,interpolated_points,a,B,w,pt,ps);
+                    [this,list_tmp,Reward,num] = this.simulate(fld,sim,begin,num,list_tmp,depth-1,eta,simIndex,tt,interpolated_points,a,B,w,pt,ps);
                     Reward = reward + eta*Reward;
                 end
                 list_tmp(num_o).N = list_tmp(num_o).N+1;
@@ -761,13 +880,13 @@ classdef RobotClass
             end
         end
 
-        function [list_tmp,begin,flag2] = expand(this,fld,sim,begin,num,list_tmp,o,tmp,interpolated_points,a,pt,ps)
+        function [this,list_tmp,begin,flag2] = expand(this,fld,sim,begin,num,list_tmp,o,tmp,interpolated_points,a,pt,ps)
             t = 1;
             flag2 = 1;
             node = list_tmp(begin);
             state = zeros(4,1);
             if tmp == 1 %action
-                %
+                %{
                 ii = randperm(size(list_tmp(begin).a,2),1);
                 action = list_tmp(begin).a(:,ii);
                 list_tmp(begin).a(:,ii) = [];
@@ -783,7 +902,7 @@ classdef RobotClass
 
                 list_tmp(begin).children_maxnum = list_tmp(begin).children_maxnum-1;
                 %}
-                %{
+                %
                 while(1)
                     flag = 0;
                     inregion = 1;
@@ -815,18 +934,26 @@ classdef RobotClass
                         p = ps{id};
                     end
 
-                    z = state(1:3);
+                    z = node.state(1:3);
                     tmp = [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'];
-
+                    
                     wrong = 0;
                     for jj = 1:21
-                        if any([1;1] >= tmp(1:2,jj))||any([49;49] <= tmp(1:2,jj))||this.map.region(ceil(tmp(1,jj)),ceil(tmp(2,jj))) < 0.3
-                            wrong = 1;
-                            break
+                        if mod(jj-1,5)
+                            [~,D] = knnsearch(this.map.PC_tree,tmp(1:2,jj)');
+                            if any([1;1] >= tmp(1:2,jj))||any([49;49] <= tmp(1:2,jj))||D < 1
+                                wrong = 1;
+                                break
+                            end
+%                         else
+%                             if any([1;1] >= tmp(1:2,jj))||any([49;49] <= tmp(1:2,jj))
+%                                 wrong = 1;
+%                                 break
+%                             end
                         end
                     end
 
-                    if wrong
+                    if ~wrong
                         break
                     end
 
@@ -867,9 +994,11 @@ classdef RobotClass
                     hist = [action;0];
                 end
                 new.hist = [node.hist,hist];
+
             else % observation
                 new = node;
                 new.num = num;
+                new.a_num = 0;
                 new.hist(6:end,end) = o;
             end
             new.a = a;
@@ -885,7 +1014,7 @@ classdef RobotClass
             begin = num;
         end
 
-        function reward = rollOut(this,fld,sim,node,eta,depth,B,w,simIndex,tt)
+        function reward = rollOut(this,fld,sim,node,eta,depth,B,w,simIndex,tt,pt,ps)
             %{
 if depth == 0
     reward = 0;
@@ -943,7 +1072,11 @@ end
                 B = (mvnrnd(B',Q))';
                 %}
                 %B(1:2,:) = B(1:2,:) -1 + 2*[rand;rand];
-                B = (mvnrnd(B',fld.target.Q))';
+                if this.is_tracking
+                    B = (mvnrnd(B',fld.target.Q_tracking))';
+                else
+                    B = (mvnrnd(B',fld.target.Q_search))';
+                end
 
                 B_tmp1 = B;
                 %{
@@ -999,6 +1132,8 @@ end
                     threshold = 0.4;
                 end
 
+                threshold = 0;
+
                 if rand < threshold
                     if isempty(node.a)
                         reward = 0;
@@ -1010,7 +1145,29 @@ end
                         state(2) = node.state(2)-action(1)*cos(node.state(3))+action(2)*sin(node.state(3));
                         state(3) = node.state(3)+action(3);
                         state(4) = action(4);
-                        if any([0;0] >= state(1:2))||any([50;50] <= state(1:2))||this.map.region_exp(ceil(state(1)),ceil(state(2))) < 0.3||fld.map.V(ceil(node.state(1)),ceil(node.state(2)),ceil(state(1)),ceil(state(2))) == 0||state(4)<0%||state(4)>5
+
+                        idd = action(5);
+                        if this.is_tracking
+                            p = pt{idd};
+                        else
+                            p = ps{idd};
+                        end
+
+                        z = node.state(1:3);
+                        tmp = [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'];
+
+                        wrong = 0;
+                        for kk = 1:21
+                            if mod(kk-1,10)
+                                [~,D] = knnsearch(this.map.PC_tree,tmp(1:2,kk)');
+                                if any([1;1] >= tmp(1:2,kk))||any([49;49] <= tmp(1:2,kk))||D < 1.5
+                                    wrong = 1;
+                                    break
+                                end
+                            end
+                        end
+
+                        if wrong
                             reward = 0;
                             node.a(:,id) = [];
                         else
@@ -1029,10 +1186,53 @@ end
                         state(2) = node.state(2)-action(1)*cos(node.state(3))+action(2)*sin(node.state(3));
                         state(3) = node.state(3)+action(3);
                         state(4) = action(4);
-                        if any([0;0] >= state(1:2))||any([50;50] <= state(1:2))||this.map.region_exp(ceil(state(1)),ceil(state(2))) < 0.3||fld.map.V(ceil(node.state(1)),ceil(node.state(2)),ceil(state(1)),ceil(state(2))) == 0||state(4)<0%||state(4)>5
+
+                        id = action(5);
+                        if this.is_tracking
+                            p = pt{id};
+                        else
+                            p = ps{id};
+                        end
+
+                        z = node.state(1:3);
+                        tmp = [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'];
+
+                        wrong = 0;
+                        for kk = 1:21
+                            if mod(kk-1,10)
+                                [~,D] = knnsearch(this.map.PC_tree,tmp(1:2,kk)');
+                                if any([1;1] >= tmp(1:2,kk))||any([49;49] <= tmp(1:2,kk))||D < 1.5
+                                    wrong = 1;
+                                    break
+                                end
+                            end
+                        end
+
+                        if wrong
                             continue
                         end
-                        %
+
+                        wrong = 0;
+                        dist = norm(target-state(1:2));
+                        if dist>5
+                            goal = state(1:2) + (target-state(1:2))/dist*5;
+                        else
+                            goal = target;
+                        end
+                        vec = [state(1):(goal(1)-state(1))/10:goal(1);state(2):(goal(2)-state(2))/10:goal(2)];
+
+                        for kk = 1:size(vec,2)
+                            [~,D] = knnsearch(this.map.PC_tree,vec(1:2,kk)');
+                            if D < 1.5
+                                wrong = 1;
+                                break
+                            end
+                        end
+
+                        if wrong
+                            continue
+                        end
+
                         if norm(state(1:2)-target) < mindis
                             mindis = norm(state(1:2)-target);
                             action_opt = action;
@@ -1040,11 +1240,13 @@ end
                     end
                     if isempty(action_opt)
                         reward = 0;
+                        return
                     else
                         node.state(1) = node.state(1)+action_opt(1)*sin(node.state(3))+action_opt(2)*cos(node.state(3));
                         node.state(2) = node.state(2)-action_opt(1)*cos(node.state(3))+action_opt(2)*sin(node.state(3));
                         node.state(3) = node.state(3)+action_opt(3);
                         node.state(4) = action_opt(4);
+                        %reward = MI(this,fld,sim,state,B,w)+1/norm(node.state(1:2)-target);
                         reward = MI(this,fld,sim,state,B,w);
                     end
                 end
@@ -1055,10 +1257,12 @@ end
                     clf
                 end
                 %}
+                %{
                 if reward>0.1 &&~this.is_tracking
                     return
                 end
-                reward = reward + eta*this.rollOut(fld,sim,node,eta,depth-1,B,w,simIndex+1,tt);
+                %}
+                reward = reward + eta*this.rollOut(fld,sim,node,eta,depth-1,B,w,simIndex+1,tt,pt,ps);
             end
         end
 
@@ -1094,60 +1298,6 @@ end
             end
 
             ratio = 1;
-
-            %{
-            if is_tracking == 1%&&~all(FOV)
-                particles_tmp1 = zeros(3,N);
-                particles_tmp1(1,:) = particles(1,:).*FOV;
-                particles_tmp1(2,:) = particles(2,:).*FOV;
-                particles_tmp1(3,:) = zeros(1,N);
-                w = w.*FOV;
-                particles_tmp1(:,any(particles_tmp1,1)==0)=[];
-                w(:,any(w,1)==0)=[];
-
-                N_tmp = size(particles_tmp1,2);
-                jj = 1;
-                for ii = 1:N_tmp
-                    if V(ceil(state(1)),ceil(state(2)),ceil(particles_tmp1(1,jj)),ceil(particles_tmp1(2,jj)))==0
-                        particles_tmp1(:,jj) = [];
-                        w(jj) = [];
-                        continue
-                    end
-                    jj=jj+1;
-                end
-                w = w./sum(w);
-                ratio = length(w)/N;
-                %{
-    particles_tmp1 = particles;
-    jj = 1;
-    ii = 1;
-    while(ii<=N)
-        if FOV(jj) == 0
-            particles_tmp1(:,jj) = [];
-        else
-            jj = jj + 1;
-        end
-        ii = ii + 1;
-    end
-                %}
-                if size(particles_tmp1,2) == 0
-                    reward = 0;
-                    return;
-                end
-                particles = particles_tmp1;
-                N = length(w);
-                %FOV = ones(1,N);
-                %{
-    %没必要补全 删除不需要的即可 验证了删除和补全差别很小
-    particles_tmp2 = zeros(2,N);
-    particles_tmp2(:,1:size(particles_tmp1,2)) = particles_tmp1;
-    for jj = size(particles_tmp1,2)+1:N
-        particles_tmp2(:,jj) = particles_tmp1(:,randperm(size(particles_tmp1,2),1));
-    end
-    particles = particles_tmp2;
-                %}
-            end
-            %}
 
             % particle simplification
             Cidx = zeros(size(particles,2),2);
