@@ -748,7 +748,9 @@ classdef RobotClass
                 % feasible particles
                 jj = 1;
                 for ii = 1:size(B,2)
-                    if any([1;1] > B(1:2,jj))||any([49;49] < B(1:2,jj))||this.map.region_exp(ceil(B(1,jj)),ceil(B(2,jj))) < 0.3
+                    %[~,D] = knnsearch(this.map.PC_tree,B(1:2,jj)');
+                    %if any([1;1] > B(1:2,jj))||any([49;49] < B(1:2,jj))%||D < 0.5
+                     if any([1;1] > B(1:2,jj))||any([49;49] < B(1:2,jj))||this.map.region(ceil(B(1,jj)),ceil(B(2,jj))) < 0.3
                         B(:,jj) = [];
                         w(jj) = [];
                         continue
@@ -1015,45 +1017,6 @@ classdef RobotClass
         end
 
         function reward = rollOut(this,fld,sim,node,eta,depth,B,w,simIndex,tt,pt,ps)
-            %{
-if depth == 0
-    reward = 0;
-    return
-else
-    f = F{Sim};
-    B = f(B);
-    
-    jj = 1;
-    for ii = 1:size(B,2)
-        if any([0;0] > B(:,jj))||any([100;100] < B(:,jj))||region(ceil(B(1,jj)),ceil(B(2,jj))) == 0
-            B(:,jj) = [];
-            w(jj) = [];
-            continue
-        end
-        jj = jj+1;
-    end
-    w = w./sum(w);
-    
-    action = node.a(:,randperm(length(node.a),1));
-    state = node.state;
-    node.state(3) = node.state(3)+action(1);
-    node.state(4) = node.state(4)+action(2);
-    node.state(1) = node.state(1)+cos(node.state(3))*node.state(4);
-    node.state(2) = node.state(2)+sin(node.state(3))*node.state(4);
-    if any([0;0] >= node.state(1:2))||any([100;100] <= node.state(1:2))%||region(ceil(node.state(1)),ceil(node.state(2))) == 0||V(ceil(node.state(1)),ceil(node.state(2)),ceil(state(1)),ceil(state(2))) == 0
-        reward = 0;
-        return
-    end
-    
-    reward = MI(node.state,size(B,2),B,w,is_tracking,V);
-%     mu = h(B,node.state)';
-%     gm = gmdistribution(mu,R);
-%     o = random(gm);
-%     I = @(x) x;
-%    [B,w] = PF(node.state,B,w,o,r,zeros(2,2),R,I,h,list_obstacle);
-    reward = reward + eta*rollOut(node,eta,depth-1,B,w,f,h,R,r,is_tracking,polyin,region,V,F,Sim);
-end
-            %}
             if depth == 0
                 reward = 0;
                 return
@@ -1160,7 +1123,7 @@ end
                         for kk = 1:21
                             if mod(kk-1,10)
                                 [~,D] = knnsearch(this.map.PC_tree,tmp(1:2,kk)');
-                                if any([1;1] >= tmp(1:2,kk))||any([49;49] <= tmp(1:2,kk))||D < 1.5
+                                if any([1;1] >= tmp(1:2,kk))||any([49;49] <= tmp(1:2,kk))||D < 1
                                     wrong = 1;
                                     break
                                 end
@@ -1201,7 +1164,7 @@ end
                         for kk = 1:21
                             if mod(kk-1,10)
                                 [~,D] = knnsearch(this.map.PC_tree,tmp(1:2,kk)');
-                                if any([1;1] >= tmp(1:2,kk))||any([49;49] <= tmp(1:2,kk))||D < 1.5
+                                if any([1;1] >= tmp(1:2,kk))||any([49;49] <= tmp(1:2,kk))||D < 1
                                     wrong = 1;
                                     break
                                 end
@@ -1212,6 +1175,7 @@ end
                             continue
                         end
 
+                        %{
                         wrong = 0;
                         dist = norm(target-state(1:2));
                         if dist>5
@@ -1223,11 +1187,12 @@ end
 
                         for kk = 1:size(vec,2)
                             [~,D] = knnsearch(this.map.PC_tree,vec(1:2,kk)');
-                            if D < 1.5
+                            if D < 1
                                 wrong = 1;
                                 break
                             end
                         end
+                        %}
 
                         if wrong
                             continue
@@ -1247,7 +1212,7 @@ end
                         node.state(3) = node.state(3)+action_opt(3);
                         node.state(4) = action_opt(4);
                         %reward = MI(this,fld,sim,state,B,w)+1/norm(node.state(1:2)-target);
-                        reward = MI(this,fld,sim,state,B,w);
+                        reward = MI(this,fld,sim,node.state,B,w);
                     end
                 end
                 %{
@@ -1269,8 +1234,9 @@ end
         %% objective function
         
         function reward = MI(this,fld,sim,state,particles,w)
-            %
-            if any([0;0] >= state(1:2))||any([50;50] <= state(1:2))||this.map.region_exp(ceil(state(1)),ceil(state(2))) < 0.3
+            %{
+            [~,D] = knnsearch(this.map.PC_tree,state(1:2)');
+            if any([1;1] >= state(1:2))||any([49;49] <= state(1:2))||D < 1
                 reward = -1000;
                 return
             end
