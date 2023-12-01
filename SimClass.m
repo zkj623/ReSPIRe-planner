@@ -117,7 +117,7 @@ classdef SimClass
             plot(fld.target.traj(ii+1,1),fld.target.traj(ii+1,2),"pentagram",'Color',[0.13333 0.5451 0.13333],'MarkerFaceColor',[0.13333 0.5451 0.13333],MarkerSize=15);
             plot(rbt.state(1),rbt.state(2),'ro',MarkerFaceColor='r',MarkerSize=15);
 
-            %{
+            %
             for jj = 1:length(rbt.tree)
                 if rbt.tree(jj).a_num ~= 0
                     state = rbt.tree(jj).state;

@@ -52,7 +52,10 @@ save_video = true;
 
 % target.pos = [10;20];
 %target.pos = [targetPose(tt,1,1);targetPose(tt,1,2);targetPose(tt,1,3)];
-target.pos = [45;45.5;0];
+
+%target.pos = [45;45.5;0];
+target.pos = [36;23;0];
+target.pos = [25;45;0];
 
 switch tar_model
     case 'static'
@@ -196,7 +199,7 @@ switch prior_case
         inPara_rbt.particles = [inPara_rbt.particles;zeros(1,size(inPara_rbt.particles,2))];
         %}
         %inPara_rbt.particles = mvnrnd(target.pos-[10;10;0],[50 0 0;0 50 0;0 0 0.005],inPara_rbt.N)';
-        inPara_rbt.particles = mvnrnd([36;36;0],[50 0 0;0 50 0;0 0 0.005],inPara_rbt.N)';
+        inPara_rbt.particles = mvnrnd([30;36;0],[50 0 0;0 50 0;0 0 0.005],inPara_rbt.N)';
     case 'multimodal'
         noise1 = zeros(1,3);
         noise1(1) = noise_point(tt,1,1);
@@ -243,6 +246,7 @@ interpolated_points = zeros(7,2,3);
 ps = {};
 % inputs = [30 pi/4;30 pi/8;30 -pi/4;30 -pi/8;30 0;10 -2*pi/3;10 2*pi/3];
 inputs = [30 pi/4;30 pi/8;30 -pi/4;30 -pi/8;30 0;5 -pi/4;5 pi/4];
+inputs = [30 pi/4;30 pi/8;30 -pi/4;30 -pi/8;30 0;5 -pi/6;5 pi/6];
 % inputs = [20 pi/4;20 pi/8;20 -pi/4;20 -pi/8;20 0;5 -pi/4;5 pi/4];
 
 for ii = 1:size(a,2)
