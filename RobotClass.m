@@ -7,6 +7,7 @@ classdef RobotClass
     properties
         % motion specs
         traj;
+        planned_traj;
         state; % [x;y;theta;v]
         a_lb;
         a_ub;
@@ -21,6 +22,10 @@ classdef RobotClass
         theta0; % sensor range in angle
         rmin; % sensor range minimum
         rmax; % sensor range maximum
+
+        ranges;
+        angles;
+
         inFOV_hist; 
         is_tracking;
 
@@ -46,6 +51,12 @@ classdef RobotClass
         particles; % array of particle positions [x;y]
         w; % particles' weight
         N; % particles' number
+
+        first_particles;
+        first_w;
+        hgrid;
+        tree;
+        allstate;
         
         % map
         map;
@@ -79,6 +90,7 @@ classdef RobotClass
         function this = RobotClass(inPara)
             this.state = inPara.state;
             this.traj = inPara.traj;
+            this.planned_traj = inPara.planned_traj;
             this.a_lb = inPara.a_lb;
             this.a_ub = inPara.a_ub;
             this.w_lb = inPara.w_lb;
@@ -95,6 +107,9 @@ classdef RobotClass
             this.rmin = inPara.minrange;
             this.rmax = inPara.maxrange;
             this.mdim = inPara.mdim;
+
+            this.ranges = inPara.ranges;
+            this.angles = inPara.angles;
 
             this.inFOV_hist = inPara.inFOV_hist; 
             this.is_tracking = inPara.is_tracking;
@@ -114,6 +129,12 @@ classdef RobotClass
             this.particles = inPara.particles;
             this.w = inPara.w;
             this.N = inPara.N;
+
+            this.first_particles = inPara.first_particles;
+            this.first_w = inPara.first_w;
+            this.hgrid = inPara.hgrid;
+            this.tree = inPara.tree;
+            this.allstate = inPara.allstate;
 
             this.map = inPara.map;
 
@@ -148,31 +169,21 @@ classdef RobotClass
 %         end
 
         function flag = inFOV(this,z,tar_pos)
-            %
-            A = tar_pos(1:2,:) - z(1:2);
-            flag1 = sqrt(A(1,:).^2+(A(2,:).^2)) < this.rmax;
-            flag2 = sqrt(A(1,:).^2+(A(2,:).^2)) > this.rmin;
-            flag3 = (A(1,:)*cos(z(3))+A(2,:)*sin(z(3)))./sqrt(A(1,:).^2+(A(2,:).^2)) > cos(this.theta0/2);
+            tmp = tar_pos(1:2,:) - z(1:2);
+            ran = sqrt(tmp(1,:).^2+(tmp(2,:).^2));
+            flag1 = ran < this.rmax;
+            flag2 = ran > this.rmin;
+            flag3 = (tmp(1,:)*cos(z(3))+tmp(2,:)*sin(z(3)))./ran > cos(this.theta0/2);
             flag = flag1.*flag2.*flag3;
-            %}
-            %{
-            A = tar_pos(1:2,:) - z(1:2);
-            flag = sqrt(A(1,:).^2+(A(2,:).^2)) < r;
-            %}
         end
 
         function flag = inFOV_red(this,z,tar_pos)
-            %
-            A = tar_pos(1:2,:) - z(1:2);
-            flag1 = sqrt(A(1,:).^2+(A(2,:).^2)) < this.rmax-0.5;
-            flag2 = sqrt(A(1,:).^2+(A(2,:).^2)) > this.rmin+0.2;
-            flag3 = (A(1,:)*cos(z(3))+A(2,:)*sin(z(3)))./sqrt(A(1,:).^2+(A(2,:).^2)) > cos((this.theta0-10/180*pi)/2);
+            tmp = tar_pos(1:2,:) - z(1:2);
+            ran = sqrt(tmp(1,:).^2+(tmp(2,:).^2));
+            flag1 = ran < this.rmax-0.5;
+            flag2 = ran > this.rmin+0.2;
+            flag3 = (tmp(1,:)*cos(z(3))+tmp(2,:)*sin(z(3)))./ran > cos((this.theta0-10/180*pi)/2);
             flag = flag1.*flag2.*flag3;
-            %}
-            %{
-            A = tar_pos(1:2,:) - z(1:2);
-            flag = sqrt(A(1,:).^2+(A(2,:).^2)) < r;
-            %}
         end
 
         %% measurement generation
@@ -261,6 +272,11 @@ classdef RobotClass
             R = this.R;
             h = this.h;
             N = size(particles,2);
+            if this.is_tracking
+                Q = fld.target.Q_tracking;
+            else
+                Q = fld.target.Q_search;
+            end
 
             % particles = f(particles);
             % particles = (mvnrnd(particles',Q))';
@@ -275,7 +291,7 @@ classdef RobotClass
             particles = (mvnrnd(particles',fld.target.Q))';
                 %}
                 %particles(1:2,:) = particles(1:2,:) -1 + 2*[rand;rand];
-                particles = (mvnrnd(particles',fld.target.Q))';
+                particles = (mvnrnd(particles',Q))';
             end
 
             FOV = this.inFOV(state,particles(1:2,:));
@@ -366,7 +382,7 @@ classdef RobotClass
         end
 
         %% planning
-        function [this,optz,list_tmp] = Planner(this,fld,sim,plan_mode,list_tmp,ps,pt,tt,ii)
+        function [this,optz] = Planner(this,fld,sim,plan_mode,ps,pt,tt,ii)
 
             is_tracking = this.is_tracking;
 
@@ -378,7 +394,7 @@ classdef RobotClass
                 interpolated_points = this.int_pts_T;
             end
            
-            list_tmp = [];
+            tree = [];
             root = Node_IMPFT;
             %Initialization
             root.num = 1;
@@ -392,93 +408,119 @@ classdef RobotClass
             root.children_maxnum = 18;
             root.is_terminal = 0;
             root.delete = 0;
-            list_tmp = [list_tmp,root];
+            tree = [tree,root];
+            this.allstate = [];
 
             if is_tracking
                 max_depth = 4;
             else
-                max_depth = 5;
+                max_depth = 10;
             end
             %discount factor
             if is_tracking
                 eta = 0.95;
             else
-                eta = 0.7;
+                eta = 0.95;
             end
             num = 1;% addtion point index
 
             if is_tracking
                 planlen = 30;
             else
-                planlen = 30;
+                planlen = 50;
             end
 
             B = this.particles;
             w = this.w;
 
+            %{
             for jj = 1:planlen
-                [list_tmp,Reward,num] = this.simulate(fld,sim,1,num,list_tmp,max_depth,eta,ii+1,tt,interpolated_points,a,B,w,pt,ps);
+                [this,tree,Reward,num] = this.simulate(fld,sim,1,num,tree,max_depth,eta,ii+1,tt,interpolated_points,a,B,w,pt,ps);
             end
             %}
-            %{
-    I = 1;
-    if is_tracking
-        I_delta = 0.2;
-        while I > I_delta
-            [list_tmp,Reward,num,I] = simulate(1,num,list_tmp,particles,max_depth,targetControl,h,R,r,Q,eta,w,is_tracking,polyin,region,V,ii,sensor,rb_motion_model,tt,planner,a1,G,max_depth,interpolated_points,state_estimation,a);
-        end
+            %
+            while num < 100
+                [this,tree,Reward,num] = this.simulate(fld,sim,1,num,tree,max_depth,eta,ii+1,tt,interpolated_points,a,B,w,pt,ps);
+            end
             %}
 
+            this.tree = tree;
+            this.planned_traj = [];
+
             max_value = -10000;
-            if isempty(list_tmp(1).children)
+            if isempty(tree(1).children)
                 optz = this.state;
             else
-                val = zeros(length(list_tmp(1).children),1);
-                for jj = 1:length(list_tmp(1).children)
-                    val(jj) = list_tmp(list_tmp(1).children(jj)).Q;
+                %% planning horizon 1
+                val = zeros(length(tree(1).children),1);
+                for jj = 1:length(tree(1).children)
+                    val(jj) = tree(tree(1).children(jj)).Q;
                 end
                 [value_max,maxid] = max(val);
-                %{
-                if value_max == 0
-                    optz = this.state;
-                    this.traj = [this.traj repmat(optz(1:3),1,21)];
-                else
-                    opt = list_tmp(1).children(maxid);
-                    optz = list_tmp(opt).state;
-                    id = list_tmp(opt).a_num;
-                    z = this.state;
-                    if is_tracking
-                        p = pt{id};
-                    else
-                        p = ps{id};
-                    end
-                    this.traj = [this.traj [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)']];
-                end
-                %}
-                %
-                opt = list_tmp(1).children(maxid);
-                optz = list_tmp(opt).state;
-                id = list_tmp(opt).a_num;
+                opt = tree(1).children(maxid);
+                optz = tree(opt).state;
+                id = tree(opt).a_num;
                 z = this.state;
                 if is_tracking
                     p = pt{id};
                 else
                     p = ps{id};
                 end
-                this.traj = [this.traj [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)']];
+                this.traj = [this.traj [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2]];
+                this.planned_traj = [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2];
+
+                %% planning horizon 2
+                if ~isempty(tree(opt).children)
+                    opt = tree(opt).children(1);
+                    if ~isempty(tree(opt).children)
+                        val = zeros(length(tree(opt).children),1);
+                        for jj = 1:length(tree(opt).children)
+                            val(jj) = tree(tree(opt).children(jj)).Q;
+                        end
+                        z = tree(opt).state;
+                        [~,maxid] = max(val);
+                        opt = tree(opt).children(maxid);
+                        id = tree(opt).a_num;
+                        if is_tracking
+                            p = pt{id};
+                        else
+                            p = ps{id};
+                        end
+                        this.planned_traj = [this.planned_traj [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2]];
+                    end
+                end
+
+                 %% planning horizon 3
+%                 if ~isempty(tree_tmp(opt).children)
+%                     val = zeros(length(tree_tmp(opt).children),1);
+%                     for jj = 1:length(tree_tmp(opt).children)
+%                         val(jj) = tree_tmp(tree_tmp(opt).children(jj)).Q;
+%                     end
+%                     z = tree_tmp(opt).state;
+%                     %z = this.planned_traj(:,end);
+%                     [~,maxid] = max(val);
+%                     opt = tree_tmp(opt).children(maxid);
+%                     id = tree_tmp(opt).a_num;
+%                     if is_tracking
+%                         p = pt{id};
+%                     else
+%                         p = ps{id};
+%                     end
+%                     this.planned_traj = [this.planned_traj [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2]];
+%                 end
                 %}
             end
             this.value_max = value_max;
 
-            %list(ii,1:length(list_tmp)) = list_tmp;
+            %tree(ii,1:length(tree_tmp)) = tree_tmp;
         end
 
         %% policy tree construction
-        function [list_tmp,Reward,num] = simulate(this,fld,sim,begin,num,list_tmp,depth,eta,simIndex,tt,interpolated_points,a,B,w,pt,ps) 
+        function [this,tree_tmp,Reward,num] = simulate(this,fld,sim,begin,num,tree_tmp,depth,eta,simIndex,tt,interpolated_points,a,B,w,pt,ps) 
             if this.is_tracking
                 K = 3;
             else
-                K = 1;
+                K = 0.5;
             end
             alpha = 0.1;
             control = [fld.target.control(tt,simIndex,1);fld.target.control(tt,simIndex,2)];
@@ -487,34 +529,34 @@ classdef RobotClass
                 Reward = 0;
                 return
             else
-                z = list_tmp(begin).state(1:3);
+                z = tree_tmp(begin).state(1:3);
 
-                list_tmp(begin).N = list_tmp(begin).N+1;
-                %if length(list_tmp(begin).children) == list_tmp(begin).children_maxnum
-                if isempty(list_tmp(begin).a)
-                    if ~isempty(list_tmp(begin).children)
-                        [begin,list_tmp] = this.best_child(begin,0.732,list_tmp);
+                tree_tmp(begin).N = tree_tmp(begin).N+1;
+                %if length(tree_tmp(begin).children) == tree_tmp(begin).children_maxnum
+                if isempty(tree_tmp(begin).a)
+                    if ~isempty(tree_tmp(begin).children)
+                        [begin,tree_tmp] = this.best_child(begin,0.732,tree_tmp);
                     else
                         begin_tmp = begin;
-                        begin = list_tmp(begin).parent;
+                        begin = tree_tmp(begin).parent;
                         if begin ~= 0
-                            list_tmp(begin).children(find(list_tmp(begin).children==begin_tmp))=[];
+                            tree_tmp(begin).children(find(tree_tmp(begin).children==begin_tmp))=[];
                         end
                         Reward = -100;
                         return
                     end
                 else
                     num = num + 1;
-                    [list_tmp,begin,flag2] = this.expand(fld,sim,begin,num,list_tmp,0,1,interpolated_points,a,pt,ps);
+                    [this,tree_tmp,begin,flag2] = this.expand(sim,begin,num,tree_tmp,0,1,interpolated_points,a,pt,ps);
                     if flag2 == 0
                         num = num - 1;
-                        if ~isempty(list_tmp(begin).children)
-                            [begin,list_tmp] = this.best_child(begin,0.732,list_tmp);
+                        if ~isempty(tree_tmp(begin).children)
+                            [begin,tree_tmp] = this.best_child(begin,0.732,tree_tmp);
                         else
                             begin_tmp = begin;
-                            begin = list_tmp(begin).parent;
+                            begin = tree_tmp(begin).parent;
                             if begin ~= 0
-                                list_tmp(begin).children(find(list_tmp(begin).children==begin_tmp))=[];
+                                tree_tmp(begin).children(find(tree_tmp(begin).children==begin_tmp))=[];
                             end
                             Reward = -100;
                             return
@@ -525,7 +567,7 @@ classdef RobotClass
                 num_a = begin;
 
                 %
-                id = list_tmp(num_a).a_num;
+                id = tree_tmp(num_a).a_num;
                 if this.is_tracking
                     p = pt{id};
                 else
@@ -544,10 +586,10 @@ classdef RobotClass
 
                 if ~this.is_tracking
                     if wrong
-                        %if any([0;0] >= list_tmp(num_a).state(1:2))||any([50;50] <= list_tmp(num_a).state(1:2))||any([0;0] >= list_tmp(num_a).inter_state(1:2))||any([50;50] <= list_tmp(num_a).inter_state(1:2))||fld.map.region_exp(ceil(list_tmp(num_a).state(1)),ceil(list_tmp(num_a).state(2))) == 0||fld.map.region_exp(ceil(list_tmp(num_a).inter_state(1)),ceil(list_tmp(num_a).inter_state(2))) == 0
-                        list_tmp(num_a).N = list_tmp(num_a).N+1;
+                        %if any([0;0] >= tree_tmp(num_a).state(1:2))||any([50;50] <= tree_tmp(num_a).state(1:2))||any([0;0] >= tree_tmp(num_a).inter_state(1:2))||any([50;50] <= tree_tmp(num_a).inter_state(1:2))||fld.map.region_exp(ceil(tree_tmp(num_a).state(1)),ceil(tree_tmp(num_a).state(2))) == 0||fld.map.region_exp(ceil(tree_tmp(num_a).inter_state(1)),ceil(tree_tmp(num_a).inter_state(2))) == 0
+                        tree_tmp(num_a).N = tree_tmp(num_a).N+1;
                         %%%% need to be modified
-                        list_tmp(num_a).Q = -100;
+                        tree_tmp(num_a).Q = -100;
                         Reward = -100;
                         return
                     end
@@ -555,7 +597,7 @@ classdef RobotClass
                 %}
 
                 num_a = begin;
-                list_tmp(num_a).N = list_tmp(num_a).N+1;
+                tree_tmp(num_a).N = tree_tmp(num_a).N+1;
 
                 %{
                 t = 1;
@@ -564,7 +606,11 @@ classdef RobotClass
                 B = (mvnrnd(B',fld.target.Q))';
                 %}
                 %B(1:2,:) = B(1:2,:) -1 + 2*[rand;rand];
-                B = (mvnrnd(B',fld.target.Q))';
+                if this.is_tracking
+                    B = (mvnrnd(B',fld.target.Q_tracking))';
+                else
+                    B = (mvnrnd(B',fld.target.Q_search))';
+                end
 
                 % feasible particles
                 jj = 1;
@@ -581,14 +627,25 @@ classdef RobotClass
 
                 state_estimation = B*w';
 
-                state = list_tmp(num_a).state;
+                state = tree_tmp(num_a).state;
                 if this.is_tracking
-                    reward = this.MI(fld,sim,list_tmp(num_a).state,B,w) + this.MI(fld,sim,list_tmp(num_a).inter_state,B,w);
+                    reward = this.MI(fld,sim,tree_tmp(num_a).state,B,w) + this.MI(fld,sim,tree_tmp(num_a).inter_state,B,w);
                 else
-                    reward = this.MI(fld,sim,list_tmp(num_a).state,B,w);
+                    reward = this.MI(fld,sim,tree_tmp(num_a).state,B,w);
                 end
 
-                if length(list_tmp(begin).children) <= K*(list_tmp(begin).N^alpha)
+                %{
+                dist_all = vecnorm(z(1:2)-this.first_particles(1:2,:));
+                [mindist,id] = min(dist_all);
+                %reward = reward + 0.1/norm(state(1:2)-this.first_particles(1:2,id));
+                reward = reward + 0.2*(mindist-norm(state(1:2)-this.first_particles(1:2,id)));
+                %}
+
+                % immediate reward (to be modified)
+                tree_tmp(num_a).R = reward;
+
+
+                if length(tree_tmp(begin).children) <= K*(tree_tmp(begin).N^alpha)
                     B_tmp = B;
                     jj = 1;
                     ii = 1;
@@ -624,20 +681,20 @@ classdef RobotClass
                         end
                     end
                     num = num + 1;
-                    [list_tmp,begin] = this.expand(fld,sim,begin,num,list_tmp,o,2,interpolated_points,a,pt,ps);
+                    [this,tree_tmp,begin] = this.expand(sim,begin,num,tree_tmp,o,2,interpolated_points,a,pt,ps);
                     flag = 1;
                 else
-                    begin = list_tmp(begin).children(randperm(length(list_tmp(begin).children),1));
-                    o = list_tmp(begin).hist(6:end,end);
+                    begin = tree_tmp(begin).children(randperm(length(tree_tmp(begin).children),1));
+                    o = tree_tmp(begin).hist(6:end,end);
                     flag = 0;
                 end
                 %o=-100;
                 num_o = begin;
                 if o~=-100%这里如果不走PF可能会出现infeasible的粒子
-                    [B,w] = this.PF(fld,sim,tt,ii,list_tmp(num_a).state(:,1),B,w,o,0);
+                    [B,w] = this.PF(fld,sim,tt,ii,tree_tmp(num_a).state(:,1),B,w,o,0);
                 end
                 if flag == 1
-                    node = list_tmp(begin);
+                    node = tree_tmp(begin);
                     simIndex = simIndex + 1;
                     rollout = this.rollOut(fld,sim,node,eta,depth-1,B,w,simIndex,tt);
 
@@ -647,26 +704,20 @@ classdef RobotClass
                     Reward = reward + eta*rollout;
                 else
                     simIndex = simIndex + 1;
-                    [list_tmp,Reward,num] = this.simulate(fld,sim,begin,num,list_tmp,depth-1,eta,simIndex,tt,interpolated_points,a,B,w,pt,ps);
+                    [this,tree_tmp,Reward,num] = this.simulate(fld,sim,begin,num,tree_tmp,depth-1,eta,simIndex,tt,interpolated_points,a,B,w,pt,ps);
                     Reward = reward + eta*Reward;
                 end
-                list_tmp(num_o).N = list_tmp(num_o).N+1;
-                list_tmp(num_a).Q = list_tmp(num_a).Q + (Reward-list_tmp(num_a).Q)/list_tmp(num_a).N;
-                %     if depth == max_depth&&list_tmp(num_a).N>2
-                %         I = abs((Reward-list_tmp(num_a).Q)/list_tmp(num_a).N)/(list_tmp(num_a).Q-(Reward-list_tmp(num_a).Q)/list_tmp(num_a).N);
-                %     else
-                %         I = 1;
-                %     end
-                %     I = 1;
+                tree_tmp(num_o).N = tree_tmp(num_o).N+1;
+                tree_tmp(num_a).Q = tree_tmp(num_a).Q + (Reward-tree_tmp(num_a).Q)/tree_tmp(num_a).N;
             end
         end
 
-        function [v,list_tmp] = best_child(this,begin,c,list_tmp)
+        function [v,tree_tmp] = best_child(this,begin,c,tree_tmp)
             max = -10000;
-            for jj = 1:length(list_tmp(begin).children)
-                node = list_tmp(begin);
+            for jj = 1:length(tree_tmp(begin).children)
+                node = tree_tmp(begin);
                 tmp = node.children(jj);
-                val = list_tmp(tmp).Q+2*c*(log(node.N)/list_tmp(tmp).N)^0.5;
+                val = tree_tmp(tmp).Q+2*c*(log(node.N)/tree_tmp(tmp).N)^0.5;
                 if val>max
                     max = val;
                     v = tmp;
@@ -674,16 +725,84 @@ classdef RobotClass
             end
         end
 
-        function [list_tmp,begin,flag2] = expand(this,fld,sim,begin,num,list_tmp,o,tmp,interpolated_points,a,pt,ps)
+        function tree_tmp = backup(this,tree_tmp,begin,r,eta)
+            idx = begin;
+            while(idx~=1)
+                if tree_tmp(idx).a_num == 0
+                    tree_tmp(idx).N = tree_tmp(idx).N+1;
+                    idx = tree_tmp(idx).parent;
+                else
+                    tree_tmp(idx).N = tree_tmp(idx).N+1;
+                    tree_tmp(idx).Q = tree_tmp(idx).Q + (r-tree_tmp(idx).Q)/tree_tmp(idx).N;
+                    idx = tree_tmp(idx).parent;
+                    r = tree_tmp(idx).R + eta*r;
+                end
+            end
+        end
+
+        function [this,tree_tmp,num] = expand_spec(this,sim,begin,num,tree_tmp,state,action,a)
+            node = tree_tmp(begin);
+
+            % action node
+            new = Node_IMPFT;
+            new.num = num;
+            new.a_num = action(5);
+            new.state = state;
+
+            if strcmp(sim.sensor_type,'rb')
+                hist = [action;0;0];
+            else
+                hist = [action;0];
+            end
+            new.hist = [node.hist,hist];
+
+            new.a = a;
+            new.N = 1;
+            new.R = 0;
+            new.Q = 0;
+            new.r = 0;
+            new.parent = begin;
+            new.children = [];
+            new.children_maxnum = 18;
+            tree_tmp(begin).children = [tree_tmp(begin).children,new.num];
+            new.is_terminal = 0;
+            new.delete = 0;
+            tree_tmp(num) = new;
+            begin = num;
+
+            num = num + 1;
+
+            % observation node
+            %new = node;
+            new.num = num;
+            new.a_num = 0;
+            %new.hist(6:end,end) = o;
+
+%             new.a = a;
+%             new.N = 0;
+%             new.R = 0;
+%             new.Q = 0;
+%             new.r = 0;
+            new.parent = begin;
+            new.children = [];
+            new.children_maxnum = 18;
+            tree_tmp(begin).children = [tree_tmp(begin).children,new.num];
+            new.is_terminal = 0;
+            new.delete = 0;
+            tree_tmp(num) = new;
+            begin = num;
+        end
+
+        function [this,tree_tmp,begin,flag2] = expand(this,sim,begin,num,tree_tmp,o,tmp,interpolated_points,a,pt,ps)
             t = 1;
             flag2 = 1;
-            node = list_tmp(begin);
+            node = tree_tmp(begin);
             state = zeros(4,1);
             if tmp == 1 %action
                 %
-                ii = randperm(size(list_tmp(begin).a,2),1);
-                action = list_tmp(begin).a(:,ii);
-                list_tmp(begin).a(:,ii) = [];
+                ii = randperm(size(tree_tmp(begin).a,2),1);
+                action = tree_tmp(begin).a(:,ii);
+                tree_tmp(begin).a(:,ii) = [];
 
                 state(1) = node.state(1)+action(1)*sin(node.state(3))*t+action(2)*cos(node.state(3))*t;
                 state(2) = node.state(2)-action(1)*cos(node.state(3))*t+action(2)*sin(node.state(3))*t;
@@ -694,19 +813,19 @@ classdef RobotClass
 %                     -interpolated_points(action(5),1,1)*cos(node.state(3))+interpolated_points(action(5),1,2)*sin(node.state(3))+node.state(2);
 %                     node.state(3)+interpolated_points(action(5),1,3)];
 
-                list_tmp(begin).children_maxnum = list_tmp(begin).children_maxnum-1;
+                tree_tmp(begin).children_maxnum = tree_tmp(begin).children_maxnum-1;
                 %}
                 %{
                 while(1)
                     flag = 0;
                     inregion = 1;
-                    if isempty(list_tmp(begin).a)%&&isempty(list_tmp(begin).children)
+                    if isempty(tree_tmp(begin).a)%&&isempty(tree_tmp(begin).children)
                         flag2 = 0;
                         return
                     end
-                    ii = randperm(size(list_tmp(begin).a,2),1);
-                    action = list_tmp(begin).a(:,ii);
-                    list_tmp(begin).a(:,ii) = [];
+                    ii = randperm(size(tree_tmp(begin).a,2),1);
+                    action = tree_tmp(begin).a(:,ii);
+                    tree_tmp(begin).a(:,ii) = [];
 
                     state(1) = node.state(1)+action(1)*sin(node.state(3))*t+action(2)*cos(node.state(3))*t;
                     state(2) = node.state(2)-action(1)*cos(node.state(3))*t+action(2)*sin(node.state(3))*t;
@@ -747,12 +866,12 @@ classdef RobotClass
                     if any([0;0] >= state(1:2))||any([50;50] <= state(1:2))||any([0;0] >= inter_state(1:2))||any([50;50] <= inter_state(1:2))
                         flag = 1;
                         inregion = 0;
-                        %list_tmp(begin).Q = list_tmp(begin).Q - 1000;
+                        %tree_tmp(begin).Q = tree_tmp(begin).Q - 1000;
                     end
                     if inregion == 1
                         if fld.map.region_exp(ceil(state(1)),ceil(state(2))) == 0||fld.map.V(ceil(node.state(1)),ceil(node.state(2)),ceil(state(1)),ceil(state(2))) == 0%||region(ceil(inter_state(1)),ceil(inter_state(2))) == 0
                             flag = 1;
-                            %list_tmp(begin).Q = list_tmp(begin).Q - 1000;
+                            %tree_tmp(begin).Q = tree_tmp(begin).Q - 1000;
                         end
                     end
 
@@ -763,7 +882,7 @@ classdef RobotClass
                         break
                     end
                     %}
-                    list_tmp(begin).children_maxnum = list_tmp(begin).children_maxnum-1;
+                    tree_tmp(begin).children_maxnum = tree_tmp(begin).children_maxnum-1;
                 end
                 %}
                 new = Node_IMPFT;
@@ -783,61 +902,25 @@ classdef RobotClass
             else % observation
                 new = node;
                 new.num = num;
+                new.a_num = 0;
                 new.hist(6:end,end) = o;
             end
             new.a = a;
             new.N = 0;
+            new.R = 0;
             new.Q = 0;
+            new.r = 0;
             new.parent = begin;
             new.children = [];
             new.children_maxnum = 18;
-            list_tmp(begin).children = [list_tmp(begin).children,new.num];
+            tree_tmp(begin).children = [tree_tmp(begin).children,new.num];
             new.is_terminal = 0;
             new.delete = 0;
-            list_tmp(num) = new;
+            tree_tmp(num) = new;
             begin = num;
         end
 
         function reward = rollOut(this,fld,sim,node,eta,depth,B,w,simIndex,tt)
-            %{
-if depth == 0
-    reward = 0;
-    return
-else
-    f = F{Sim};
-    B = f(B);
-    
-    jj = 1;
-    for ii = 1:size(B,2)
-        if any([0;0] > B(:,jj))||any([100;100] < B(:,jj))||region(ceil(B(1,jj)),ceil(B(2,jj))) == 0
-            B(:,jj) = [];
-            w(jj) = [];
-            continue
-        end
-        jj = jj+1;
-    end
-    w = w./sum(w);
-    
-    action = node.a(:,randperm(length(node.a),1));
-    state = node.state;
-    node.state(3) = node.state(3)+action(1);
-    node.state(4) = node.state(4)+action(2);
-    node.state(1) = node.state(1)+cos(node.state(3))*node.state(4);
-    node.state(2) = node.state(2)+sin(node.state(3))*node.state(4);
-    if any([0;0] >= node.state(1:2))||any([100;100] <= node.state(1:2))%||region(ceil(node.state(1)),ceil(node.state(2))) == 0||V(ceil(node.state(1)),ceil(node.state(2)),ceil(state(1)),ceil(state(2))) == 0
-        reward = 0;
-        return
-    end
-    
-    reward = MI(node.state,size(B,2),B,w,is_tracking,V);
-%     mu = h(B,node.state)';
-%     gm = gmdistribution(mu,R);
-%     o = random(gm);
-%     I = @(x) x;
-%    [B,w] = PF(node.state,B,w,o,r,zeros(2,2),R,I,h,list_obstacle);
-    reward = reward + eta*rollOut(node,eta,depth-1,B,w,f,h,R,r,is_tracking,polyin,region,V,F,Sim);
-end
-            %}
             if depth == 0
                 reward = 0;
                 return
@@ -856,7 +939,11 @@ end
                 B = (mvnrnd(B',Q))';
                 %}
                 %B(1:2,:) = B(1:2,:) -1 + 2*[rand;rand];
-                B = (mvnrnd(B',fld.target.Q))';
+                if this.is_tracking
+                    B = (mvnrnd(B',fld.target.Q_tracking))';
+                else
+                    B = (mvnrnd(B',fld.target.Q_search))';
+                end
 
                 B_tmp1 = B;
                 %{
@@ -911,6 +998,8 @@ end
                 else
                     threshold = 0.4;
                 end
+
+                threshold = 0;
 
                 if rand < threshold
                     if isempty(node.a)

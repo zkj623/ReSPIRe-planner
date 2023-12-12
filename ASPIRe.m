@@ -104,18 +104,22 @@ for ii = 1:sim_len
     %% target position estimation
     rbt.y = rbt.sensorGen(fld);
 
-    ranges = zeros(50,1);
-    angles = linspace(-pi/4,pi/4,50);
-    maxrange = 8;
+    lidarnum = 30;
+    ranges = zeros(lidarnum,1);
+    angles = linspace(-pi/4,pi/4,lidarnum);
+    maxrange = rbt.rmax;
 
     intsectionPts = rayIntersection(fld.map.occ_map,rbt.state(1:3)',angles,maxrange,0.8);
 
     for jj = 1:size(intsectionPts,1)
         if ~isnan(intsectionPts(jj,1))
-            ranges(jj) = norm(intsectionPts(jj,:)-rbt.state(1:2)')+0.1;
+            ranges(jj) = norm(intsectionPts(jj,:)-rbt.state(1:2)')+0.1+normrnd(0,rbt.R(1,1));
+            while(ranges(jj)<=0)
+                ranges(jj) = norm(intsectionPts(jj,:)-rbt.state(1:2)')+0.1+normrnd(0,rbt.R(1,1));
+            end
             %ranges(jj) = 6;
         else
-            ranges(jj) = 8.1;
+            ranges(jj) = maxrange+0.1;
         end
     end
 
@@ -134,10 +138,7 @@ for ii = 1:sim_len
     rbt.map.region = 1-region1;
     rbt.map.region_exp = rbt.map.region;
 
-    % for debug purposes only
-    %     sprintf('gameSim.m, line %d, measurement:',MFileLineNr())
-    %     display(rbt.y)
-
+    %% particle filtering
     [rbt.particles,rbt.w] = rbt.PF(fld,sim,tt,ii,rbt.state,rbt.particles,rbt.w,rbt.y,1);
     rbt.est_pos = rbt.particles*rbt.w';
 
@@ -145,9 +146,109 @@ for ii = 1:sim_len
 
     rbt.inFOV_hist = [rbt.inFOV_hist rbt.is_tracking];
 
-    %sim.plotFilter(rbt,fld,tt,ii);
-    sim.plot_rbt_map(rbt,fld,tt,ii);
-    %pause(0.2);
+    % hgrid
+    particles = rbt.particles;
+    w = rbt.w;
+    Cidx = zeros(size(particles,2),2);
+    flag = zeros(4,4);
+    N = 0;
+    grid_size = rbt.map.size/4;
+    for mm = 1:size(particles,2)
+        id1 = ceil(particles(1,mm)/grid_size);
+        Cidx(mm,1) = id1;
+        id2 = ceil(particles(2,mm)/grid_size);
+        Cidx(mm,2) = id2;
+        if flag(id1,id2) == 0
+            N = N + 1;
+            flag(id1,id2) = N;
+        end
+    end
+    %N
+    particles_tmp = particles;
+    w_tmp = w;
+    particles = zeros(3,N);
+    w = zeros(1,N);
+    for mm = 1:size(particles_tmp,2)
+        w(flag(Cidx(mm,1),Cidx(mm,2))) = w(flag(Cidx(mm,1),Cidx(mm,2))) + w_tmp(mm);
+    end
+    for mm = 1:size(particles_tmp,2)
+        particles(:,flag(Cidx(mm,1),Cidx(mm,2))) = particles(:,flag(Cidx(mm,1),Cidx(mm,2))) + particles_tmp(:,mm).*w_tmp(mm)./w(flag(Cidx(mm,1),Cidx(mm,2)));
+    end
+
+    Cidx = zeros(size(particles,2),2);
+    flag = zeros(2,2);
+    N = 0;
+    grid_size = rbt.map.size/2;
+    for mm = 1:size(particles,2)
+        id1 = ceil(particles(1,mm)/grid_size);
+        Cidx(mm,1) = id1;
+        id2 = ceil(particles(2,mm)/grid_size);
+        Cidx(mm,2) = id2;
+        if flag(id1,id2) == 0
+            N = N + 1;
+            flag(id1,id2) = N;
+        end
+    end
+    %N
+    particles_tmp = particles;
+    w_tmp = w;
+    particles_tmp2 = zeros(3,N);
+    w = zeros(1,N);
+    for mm = 1:size(particles_tmp,2)
+        w(flag(Cidx(mm,1),Cidx(mm,2))) = w(flag(Cidx(mm,1),Cidx(mm,2))) + w_tmp(mm);
+    end
+    ll = 1;
+    for mm = 1:size(particles_tmp,2)
+        if w(flag(Cidx(mm,1),Cidx(mm,2))) < 0.3
+            particles_tmp2(:,flag(Cidx(mm,1),Cidx(mm,2))) = particles_tmp2(:,flag(Cidx(mm,1),Cidx(mm,2))) + particles_tmp(:,ll).*w_tmp(ll)./w(flag(Cidx(mm,1),Cidx(mm,2)));
+            particles_tmp(:,ll) = [];
+            w_tmp(ll) = [];
+            ll = ll - 1;
+        end
+        ll = ll+1;
+    end
+
+    rbt.first_particles = [particles_tmp particles_tmp2];
+    rbt.first_w = [w_tmp w];
+
+    kk = 1;
+    for jj = 1:size(rbt.first_particles,2)
+        if norm(rbt.first_particles(:,kk)) == 0 || rbt.first_w(kk) < 0.10
+            rbt.first_particles(:,kk) = [];
+            rbt.first_w(kk) = [];
+            kk = kk-1;
+        end
+        kk = kk+1;
+    end
+
+    %     for jj = size(rbt.particles,2)
+    %         x = floor(rbt.particles(jj,1)/(rbt.map.size/2));
+    %         y = floor(rbt.particles(jj,2)/(rbt.map.size/2));
+    %         if x==1&&y==1
+    %             rbt.hgrid(4,1) = rbt.hgrid(4,1)+rbt.w(jj);
+    %         elseif x==2&&y==1
+    %             rbt.hgrid(4,2) = rbt.hgrid(4,2)+rbt.w(jj);
+    %         elseif x==1&&y==2
+    %             rbt.hgrid(4,3) = rbt.hgrid(4,3)+rbt.w(jj);
+    %         elseif x==2&&y==2
+    %             rbt.hgrid(4,4) = rbt.hgrid(4,4)+rbt.w(jj);
+    %         end
+    %     end
+
+%     kk = 1;
+%     for jj = 1:size(rbt.first_particles,2)
+%         %rbt.hgrid = [rbt.map.size/2;0;0 rbt.map.size/2;rbt.map.size/2;0 rbt.map.size/2;0;rbt.map.size/2 rbt.map.size/2;rbt.map.size/2;rbt.map.size/2];
+%         if rbt.first_w(kk) < 0.05
+%             rbt.first_particles(kk) = [];
+%             kk = kk - 1;
+%         elseif rbt.first_w(kk) > 0.3
+%             
+%             
+%             rbt.first_particles(kk) = [];
+%             kk = kk - 1;
+%         end
+%         kk = kk + 1;
+%     end
 
     if ii > 1
         wrong = 0;
@@ -165,17 +266,8 @@ for ii = 1:sim_len
         end
     end
 
-    % skip tracking
-%     if rbt.is_tracking
-%         pause(0.1);
-%         clf
-%         break
-%     end
-
     %% robot motion planning
     tic
-
-    list_tmp = [];
 
     if strcmp(plan_mode,'NBV')
         % (TODO: changliu) legacy code. will clean up later.
@@ -184,21 +276,17 @@ for ii = 1:sim_len
     elseif strcmp(plan_mode,'sampling')
         %[optz,optu,s,snum,merit, model_merit, new_merit] = rbt.cvxPlanner_scp(fld,optz,optu,plan_mode);
     elseif strcmp(plan_mode,'ASPIRe')
-        [rbt,optz,list_tmp] = rbt.Planner(fld,sim,plan_mode,list_tmp,ps,pt,tt,ii);
+        [rbt,optz] = rbt.Planner(fld,sim,plan_mode,ps,pt,tt,ii);
     end
 
     t = toc
     %rbt.traj = [rbt.traj,optz];
 
-    list(ii,1:length(list_tmp)) = list_tmp;
-
-
-    %     rbt = rbt.updState(optu);
-    %     rbt.snum = snum;
+    list(ii,1:length(rbt.tree)) = rbt.tree;
 
     % draw plot
-    %sim.plotFilter(rbt,fld,tt,ii)
-    %     pause(0.5)
+    sim.plot_rbt_map(rbt,fld,tt,ii);
+    %pause(0.2);
 
     rbt.state = optz;
 
@@ -209,14 +297,15 @@ for ii = 1:sim_len
     end   
 
     clf
-    
-    % (TODO:changliu): need to add a useful termination condition
-    % terminating condition
-%     if trace(rbt.P) <= 1 && norm(fld.target.pos-rbt.est_pos) <= 2 && norm(rbt.state(1:2)-target.pos) <= 3
-%         display('target is localized')
-%         break
-%     end     
-   %}
+
+    % skip tracking
+    %
+    if rbt.is_tracking
+        pause(1);
+        clf
+        break
+    end
+    %}
 
     if rbt.is_tracking
     time_tracking(tt) = time_tracking(tt) + t;
