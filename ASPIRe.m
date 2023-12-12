@@ -10,7 +10,7 @@ est_err_all = [];
 time_search_all = [];
 time_tracking_all = [];
 
-for zz = 1:5
+for zz = 1:10
 t_search = zeros(50,1);
 traj_length = zeros(50,1);
 t_loss = zeros(50,1);
@@ -19,7 +19,7 @@ time_search = zeros(50,1);
 time_tracking = zeros(50,1);
 runtime = zeros(50,1);
 
-for tt = 1:50 %1:50 %44 %47
+for tt = 1:10 %1:50 %44 %47
 
 % set up parameters
 simSetup;
@@ -199,7 +199,7 @@ for ii = 1:sim_len
     end
     ll = 1;
     for mm = 1:size(particles_tmp,2)
-        if w(flag(Cidx(mm,1),Cidx(mm,2))) < 0.3
+        if w(flag(Cidx(mm,1),Cidx(mm,2))) < 0.01
             particles_tmp2(:,flag(Cidx(mm,1),Cidx(mm,2))) = particles_tmp2(:,flag(Cidx(mm,1),Cidx(mm,2))) + particles_tmp(:,ll).*w_tmp(ll)./w(flag(Cidx(mm,1),Cidx(mm,2)));
             particles_tmp(:,ll) = [];
             w_tmp(ll) = [];
@@ -213,13 +213,17 @@ for ii = 1:sim_len
 
     kk = 1;
     for jj = 1:size(rbt.first_particles,2)
-        if norm(rbt.first_particles(:,kk)) == 0 || rbt.first_w(kk) < 0.10
+        if norm(rbt.first_particles(:,kk)) == 0 || rbt.first_w(kk) < 0.05 %0.10
             rbt.first_particles(:,kk) = [];
             rbt.first_w(kk) = [];
             kk = kk-1;
         end
         kk = kk+1;
     end
+
+    dist_all = vecnorm(rbt.state(1:2)-rbt.first_particles(1:2,:));
+    [mindist,id] = min(dist_all);
+    rbt.vir_tar = rbt.first_particles(1:2,id);
 
     %     for jj = size(rbt.particles,2)
     %         x = floor(rbt.particles(jj,1)/(rbt.map.size/2));

@@ -55,8 +55,12 @@ classdef RobotClass
         first_particles;
         first_w;
         hgrid;
+        vir_tar;
+
         tree;
         allstate;
+
+        a_hist;
         
         % map
         map;
@@ -133,8 +137,12 @@ classdef RobotClass
             this.first_particles = inPara.first_particles;
             this.first_w = inPara.first_w;
             this.hgrid = inPara.hgrid;
+            this.vir_tar = inPara.vir_tar;
+
             this.tree = inPara.tree;
             this.allstate = inPara.allstate;
+
+            this.a_hist = inPara.a_hist;
 
             this.map = inPara.map;
 
@@ -311,10 +319,10 @@ classdef RobotClass
             end
             for jj = 1:N
                 if any([0;0] > particles(1:2,jj))||any([50;50] < particles(1:2,jj))
-                    w(jj) = 10^-20;
+                    w(jj) = 0;
                     continue
                 end
-                if this.map.region(ceil(particles(1,jj)),ceil(particles(2,jj))) < 0.3
+                if this.map.region(ceil(particles(1,jj)),ceil(particles(2,jj))) < 0.4
                     w(jj) = 10^-20;
                     continue
                 end
@@ -401,6 +409,14 @@ classdef RobotClass
             root.state = this.state;%匀速运动v=1
             root.hist = [];
             root.a = a;
+
+            id = this.a_hist;
+            if id == 6
+                root.a(:,7) = [];
+            elseif id == 7
+                root.a(:,6) = [];
+            end
+
             root.N = 0;
             root.Q = 0;
             root.parent = 0;
@@ -468,6 +484,7 @@ classdef RobotClass
                 end
                 this.traj = [this.traj [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2]];
                 this.planned_traj = [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2];
+                this.a_hist = id;
 
                 %% planning horizon 2
                 if ~isempty(tree(opt).children)
@@ -523,7 +540,7 @@ classdef RobotClass
                 K = 0.5;
             end
             alpha = 0.1;
-            control = [fld.target.control(tt,simIndex,1);fld.target.control(tt,simIndex,2)];
+            %control = [fld.target.control(tt,simIndex,1);fld.target.control(tt,simIndex,2)];
 
             if depth == 0
                 Reward = 0;
@@ -589,8 +606,8 @@ classdef RobotClass
                         %if any([0;0] >= tree_tmp(num_a).state(1:2))||any([50;50] <= tree_tmp(num_a).state(1:2))||any([0;0] >= tree_tmp(num_a).inter_state(1:2))||any([50;50] <= tree_tmp(num_a).inter_state(1:2))||fld.map.region_exp(ceil(tree_tmp(num_a).state(1)),ceil(tree_tmp(num_a).state(2))) == 0||fld.map.region_exp(ceil(tree_tmp(num_a).inter_state(1)),ceil(tree_tmp(num_a).inter_state(2))) == 0
                         tree_tmp(num_a).N = tree_tmp(num_a).N+1;
                         %%%% need to be modified
-                        tree_tmp(num_a).Q = -100;
-                        Reward = -100;
+                        tree_tmp(num_a).Q = -5;
+                        Reward = -5;
                         return
                     end
                 end
@@ -634,11 +651,9 @@ classdef RobotClass
                     reward = this.MI(fld,sim,tree_tmp(num_a).state,B,w);
                 end
 
-                %{
-                dist_all = vecnorm(z(1:2)-this.first_particles(1:2,:));
-                [mindist,id] = min(dist_all);
-                %reward = reward + 0.1/norm(state(1:2)-this.first_particles(1:2,id));
-                reward = reward + 0.2*(mindist-norm(state(1:2)-this.first_particles(1:2,id)));
+                %
+                reward = reward + 5/norm(state(1:2)-this.vir_tar);
+                %reward = reward + 0.2*(mindist-norm(state(1:2)-this.first_particles(1:2,id)));
                 %}
 
                 % immediate reward (to be modified)
@@ -690,17 +705,101 @@ classdef RobotClass
                 end
                 %o=-100;
                 num_o = begin;
+
+                B_pre = B;
                 if o~=-100%这里如果不走PF可能会出现infeasible的粒子
                     [B,w] = this.PF(fld,sim,tt,ii,tree_tmp(num_a).state(:,1),B,w,o,0);
                 end
                 if flag == 1
                     node = tree_tmp(begin);
-                    simIndex = simIndex + 1;
-                    rollout = this.rollOut(fld,sim,node,eta,depth-1,B,w,simIndex,tt);
+                    %{
+                        simIndex = simIndex + 1;
+                        rollout = this.rollOut(fld,sim,node,eta,depth-1,B,w,simIndex,tt,pt,ps);
+                    %}
+                    %
+                    if isempty(this.allstate)
+                        simIndex = simIndex + 1;
+                        rollout = this.rollOut(fld,sim,node,eta,depth-1,B,w,simIndex,tt,pt,ps);
+                        this.allstate = [this.allstate [node.state(1:3);begin]];
+                        tree_tmp(begin).r = rollout;
+                    else
+                        [Idx,D] = knnsearch(this.allstate(1:2,:)',node.state(1:2)');
+                        %{
+                        % for debug only
+                        if begin == this.allstate(4,Idx)
+                            1
+                        end
+                        %}
+                        if D < 1 && norm(this.allstate(3,Idx)-node.state(3)) < pi %&& begin ~= this.allstate(4,Idx)
+                            rollout = tree_tmp(this.allstate(4,Idx)).r;
+                            tree_tmp(begin).r = rollout;
+                        else
+                            simIndex = simIndex + 1;
+                            rollout = this.rollOut(fld,sim,node,eta,depth-1,B,w,simIndex,tt,pt,ps);
+                            this.allstate = [this.allstate [node.state(1:3);begin]];
+                            tree_tmp(begin).r = rollout;
 
-%                     if this.is_tracking
-%                         rollout = 0;
-%                     end
+                            % rollout reuse
+                            %
+                            % tic
+                            T = size(tree_tmp(begin).hist,2);
+                            for ii = 2:length(tree_tmp)
+                                if tree_tmp(ii).a_num == 0 && size(tree_tmp(ii).hist,2)+1 == T 
+                                    kk = 1;
+                                    for jj = 1:size(tree_tmp(ii).a,2)
+                                        action = tree_tmp(ii).a(:,kk);
+                                        id = action(5);
+                                        if this.is_tracking
+                                            p = pt{id};
+                                        else
+                                            p = ps{id};
+                                        end
+
+                                        z = tree_tmp(ii).state(1:3);
+                                        tmp = [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'];
+
+                                        wrong = 0;
+                                        for ll = 1:21
+                                            if mod(ll-1,5)==0
+                                                if any([1;1] >= tmp(1:2,ll))||any([49;49] <= tmp(1:2,ll))||this.map.region_exp(ceil(tmp(1,ll)),ceil(tmp(2,ll))) < 0.3
+                                                    wrong = 1;
+                                                    break
+                                                end
+                                            end
+                                        end
+
+                                        if wrong
+                                            %{
+                                            tree_tmp(ii).a(:,kk) = [];
+                                            kk = kk - 1;
+                                            tree_tmp = backup(this,tree_tmp,ii,-1,eta);
+                                            %}
+                                        else
+                                            if norm(this.allstate(1:2,end)-tmp(1:2,end)) < 0.5 && norm(this.allstate(3,end)-tmp(3,end)) < pi 
+                                                % expand with rollout reward
+                                                state = tmp(:,end);
+                                                state = [state;action(4)];
+                                                num = num + 1;
+                                                [this,tree_tmp,num] = this.expand_spec(sim,ii,num,tree_tmp,state,action,a);
+
+                                                % backup
+                                                r = eta*rollout + this.MI(fld,sim,state,B_pre,w); % + dist
+                                                tree_tmp = backup(this,tree_tmp,ii,r,eta);
+
+                                                tree_tmp(ii).a(:,kk) = [];
+                                                kk = kk - 1;
+                                            end
+                                        end
+
+                                        kk = kk + 1;
+                                    end
+                                end
+                            end
+                            %
+                            % toc
+                        end
+                    end
+                    %}
                     Reward = reward + eta*rollout;
                 else
                     simIndex = simIndex + 1;
@@ -899,13 +998,24 @@ classdef RobotClass
                     hist = [action;0];
                 end
                 new.hist = [node.hist,hist];
+                new.a = a;
             else % observation
                 new = node;
+                new.a = a;
+
+                %{
+                id = node.a_num;
+                if id == 6
+                    new.a(:,7) = [];
+                elseif id == 7
+                    new.a(:,6) = [];
+                end
+                %}
+
                 new.num = num;
                 new.a_num = 0;
                 new.hist(6:end,end) = o;
-            end
-            new.a = a;
+                end
             new.N = 0;
             new.R = 0;
             new.Q = 0;
@@ -920,7 +1030,7 @@ classdef RobotClass
             begin = num;
         end
 
-        function reward = rollOut(this,fld,sim,node,eta,depth,B,w,simIndex,tt)
+        function reward = rollOut(this,fld,sim,node,eta,depth,B,w,simIndex,tt,pt,ps)
             if depth == 0
                 reward = 0;
                 return
@@ -1022,7 +1132,8 @@ classdef RobotClass
                     end
                 else
                     action_opt = [];
-                    target = [B(1,:)*w';B(2,:)*w'];
+                    %target = [B(1,:)*w';B(2,:)*w'];
+                    target = this.vir_tar;
                     mindis = 100000;
                     for jj = 1:size(node.a,2)
                         action = node.a(:,jj);
@@ -1031,9 +1142,40 @@ classdef RobotClass
                         state(2) = node.state(2)-action(1)*cos(node.state(3))+action(2)*sin(node.state(3));
                         state(3) = node.state(3)+action(3);
                         state(4) = action(4);
+
+                        % 判断motion primitives中的多个点
+                        %
+                        id = action(5);
+                        if this.is_tracking
+                            p = pt{id};
+                        else
+                            p = ps{id};
+                        end
+
+                        z = node.state(1:3);
+                        tmp = [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'];
+
+                        wrong = 0;
+                        for kk = 1:21
+                            if mod(kk-1,5)==0
+                                if any([1;1] >= tmp(1:2,kk))||any([49;49] <= tmp(1:2,kk))||this.map.region_exp(ceil(tmp(1,kk)),ceil(tmp(2,kk))) < 0.3
+                                    wrong = 1;
+                                    break
+                                end
+                            end
+                        end
+
+                        if wrong
+                            continue
+                        end
+                        %}
+
+                        % 只判断motion primitives的终点
+                        %{
                         if any([0;0] >= state(1:2))||any([50;50] <= state(1:2))||this.map.region_exp(ceil(state(1)),ceil(state(2))) < 0.3||fld.map.V(ceil(node.state(1)),ceil(node.state(2)),ceil(state(1)),ceil(state(2))) == 0||state(4)<0%||state(4)>5
                             continue
                         end
+                        %}
                         %
                         if norm(state(1:2)-target) < mindis
                             mindis = norm(state(1:2)-target);
@@ -1042,12 +1184,16 @@ classdef RobotClass
                     end
                     if isempty(action_opt)
                         reward = 0;
+                        return
                     else
                         node.state(1) = node.state(1)+action_opt(1)*sin(node.state(3))+action_opt(2)*cos(node.state(3));
                         node.state(2) = node.state(2)-action_opt(1)*cos(node.state(3))+action_opt(2)*sin(node.state(3));
                         node.state(3) = node.state(3)+action_opt(3);
                         node.state(4) = action_opt(4);
-                        reward = MI(this,fld,sim,state,B,w);
+                        reward = MI(this,fld,sim,node.state,B,w);
+                        %{
+                        reward = reward + 5/norm(node.state(1:2)-target);
+                        %}
                     end
                 end
                 %{
@@ -1057,10 +1203,12 @@ classdef RobotClass
                     clf
                 end
                 %}
+                %{
                 if reward>0.1 &&~this.is_tracking
                     return
                 end
-                reward = reward + eta*this.rollOut(fld,sim,node,eta,depth-1,B,w,simIndex+1,tt);
+                %}
+                reward = reward + eta*this.rollOut(fld,sim,node,eta,depth-1,B,w,simIndex+1,tt,pt,ps);
             end
         end
 
