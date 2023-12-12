@@ -53,8 +53,8 @@ save_video = true;
 % target.pos = [10;20];
 %target.pos = [targetPose(tt,1,1);targetPose(tt,1,2);targetPose(tt,1,3)];
 
-%target.pos = [45;45.5;0];
-target.pos = [36;23;0];
+target.pos = [45;45.5;0];
+%target.pos = [36;23;0];
 target.pos = [25;45;0];
 
 switch tar_model
@@ -116,7 +116,7 @@ inPara_rbt = struct;
 % inPara_rbt.traj = rbt_state(tt,:)';
 inPara_rbt.state = [5;8;0;1];
 %inPara_rbt.state = [5;17;pi;1];
-%inPara_rbt.state = [15;5;0;1];
+% inPara_rbt.state = [15;5;0;1];
 inPara_rbt.traj = inPara_rbt.state(1:3);
 inPara_rbt.planned_traj = [];
 % z(3) = pi/2;
@@ -245,8 +245,8 @@ a = zeros(5,7); % action space
 interpolated_points = zeros(7,2,3);
 ps = {};
 % inputs = [30 pi/4;30 pi/8;30 -pi/4;30 -pi/8;30 0;10 -2*pi/3;10 2*pi/3];
-inputs = [30 pi/4;30 pi/8;30 -pi/4;30 -pi/8;30 0;5 -pi/4;5 pi/4];
-inputs = [30 pi/4;30 pi/8;30 -pi/4;30 -pi/8;30 0;5 -pi/6;5 pi/6];
+inputs = [30 pi/4;30 pi/8;30 -pi/4;30 -pi/8;30 0;2 -pi/4;2 pi/4];
+inputs = [30 pi/4;30 pi/8;30 -pi/4;30 -pi/8;30 0;2 -pi/6;2 pi/6];
 % inputs = [20 pi/4;20 pi/8;20 -pi/4;20 -pi/8;20 0;5 -pi/4;5 pi/4];
 
 for ii = 1:size(a,2)

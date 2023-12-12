@@ -170,24 +170,51 @@ classdef RobotClass
 
         function flag = inFOV(this,z,tar_pos)
             %
-            A = tar_pos(1:2,:) - z(1:2);
-            flag1 = sqrt(A(1,:).^2+(A(2,:).^2)) < this.rmax;
-            flag2 = sqrt(A(1,:).^2+(A(2,:).^2)) > this.rmin;
-            flag3 = (A(1,:)*cos(z(3))+A(2,:)*sin(z(3)))./sqrt(A(1,:).^2+(A(2,:).^2)) > cos(this.theta0/2);
+            tmp = tar_pos(1:2,:) - z(1:2);
+            ran = sqrt(tmp(1,:).^2+(tmp(2,:).^2));
+            flag1 = ran < this.rmax;
+            flag2 = ran > this.rmin;
+            flag3 = (tmp(1,:)*cos(z(3))+tmp(2,:)*sin(z(3)))./ran > cos(this.theta0/2);
+
             flag = flag1.*flag2.*flag3;
             %}
             %{
             A = tar_pos(1:2,:) - z(1:2);
             flag = sqrt(A(1,:).^2+(A(2,:).^2)) < r;
             %}
+
+            % Determine if the LoS is occluded
+            %{
+            for ii = 1:size(tar_pos,2)
+                if flag(ii)
+                    ang = atan2(tmp(2),tmp(1))-z(3);
+                    ang = mod(ang,2*pi);
+                    if ang >= pi
+                        ang = ang - 2*pi;
+                    end
+%                     ang
+                    idx = ceil((ang + this.theta0/2)/(this.theta0/size(this.ranges,1)));
+                    if idx <= 0
+%                         idx
+                        idx = 1;
+                    end
+                    if idx > 30
+%                         idx
+                        idx = 30;
+                    end
+                    flag(ii) = flag(ii)*(ran(ii)<this.ranges(idx));
+                end
+            end
+            %}
         end
 
         function flag = inFOV_red(this,z,tar_pos)
             %
-            A = tar_pos(1:2,:) - z(1:2);
-            flag1 = sqrt(A(1,:).^2+(A(2,:).^2)) < this.rmax-0.5;
-            flag2 = sqrt(A(1,:).^2+(A(2,:).^2)) > this.rmin+0.2;
-            flag3 = (A(1,:)*cos(z(3))+A(2,:)*sin(z(3)))./sqrt(A(1,:).^2+(A(2,:).^2)) > cos((this.theta0-10/180*pi)/2);
+            tmp = tar_pos(1:2,:) - z(1:2);
+            ran = sqrt(tmp(1,:).^2+(tmp(2,:).^2));
+            flag1 = ran < this.rmax-0.5;
+            flag2 = ran > this.rmin+0.2;
+            flag3 = (tmp(1,:)*cos(z(3))+tmp(2,:)*sin(z(3)))./ran > cos((this.theta0-10/180*pi)/2);
             flag = flag1.*flag2.*flag3;
             %}
             %{
@@ -208,19 +235,19 @@ classdef RobotClass
 
             if strcmp(this.sensor_type,'rb')
                 % range-bearing sensor
-                if this.inFOV(this.state,tar_pos)&&fld.map.V(ceil(this.state(1)),ceil(this.state(2)),ceil(tar_pos(1)),ceil(tar_pos(2)))
+                if this.inFOV(this.state,tar_pos)
                     y = this.h(tar_pos,this.state)+(mvnrnd([0;0],this.R))';
                 else
                     y = [-100;-100];
                 end
             elseif strcmp(this.sensor_type,'ran')
-                if this.inFOV(this.state,tar_pos)&&fld.map.V(ceil(z(1)),ceil(z(2)),ceil(tar_pos(1)),ceil(tar_pos(2)))
+                if this.inFOV(this.state,tar_pos)
                     y = this.h(tar_pos,this.state)+normrnd(0,this.R);
                 else
                     y = -100;
                 end
             elseif strcmp(this.sensor_type,'lin')
-                if this.inFOV(this.state,tar_pos)&&fld.map.V(ceil(z(1)),ceil(z(2)),ceil(tar_pos(1)),ceil(tar_pos(2)))
+                if this.inFOV(this.state,tar_pos)
                     y = this.h(tar_pos,this.state)+(mvnrnd([0;0],this.R))';
                 else
                     y = [-100;-100];
@@ -276,93 +303,6 @@ classdef RobotClass
 
        
         % particle filter
-%         function this = PF(this,fld)
-%             % target
-%             tar = fld.target;
-%             f = tar.f;
-%             % sensor
-%             h = this.h;
-%             % measurement
-%             y = this.y;
-% 
-%             particles = this.particles;
-% 
-%             %% particle filtering
-%             np = size(particles,2); % number of particles
-% 
-%             % initalize particles weights
-%             w = zeros(np,1);
-% 
-%             % state update
-%             pred_par = zeros(2,np); % predicted particle state
-%             for ii = 1:np
-%                 pred_par(:,ii) = f(particles(:,ii));
-%             end
-%             pred_par = (mvnrnd(pred_par',fld.target.Q))';
-% 
-%             % weight update
-%             for ii = 1:np
-%                 if sum(y == -100) >= 1
-%                     % if the target is outside FOV.
-%                     if this.inFOV(pred_par(:,ii))
-%                         w(ii) = 10^-20;
-%                     else
-%                         w(ii) = 1;
-%                     end
-%                 else
-%                     if this.inFOV(pred_par(:,ii))
-%                         if strcmp(this.sensor_type,'ran')
-%                             % note: for 1-d Gaussian, normpdf accepts std
-%                             w(ii) = normpdf(y,this.h(pred_par(:,ii),this.state(1:2)),sqrt(this.R));
-%                         else
-%                             % note: for high-d Gaussian, mvnpdf accepts
-%                             % covariance
-%                             w(ii) = mvnpdf(y,this.h(pred_par(:,ii),this.state(1:2)),this.R);
-%                         end
-%                     else
-%                         w(ii) = 10^-20;
-%                     end
-%                 end
-%             end
-% 
-%             % (10/4) set particles outside of field to have 0 weight
-%             for ii = 1:np
-%                 if any([fld.fld_cor(1);fld.fld_cor(3)] > pred_par(:,ii))||...
-%                         any([fld.fld_cor(2);fld.fld_cor(4)] < pred_par(:,ii))
-%                     w(ii) = 0;
-%                 end
-%             end
-% 
-%             w = w/sum(w);
-% 
-%             % resampling
-%             % opt 1: plain random resampling
-%             %{
-%             idx = randsample(1:np, np, true, w);
-%             new_particles = pred_par(:,idx);
-%             this.particles = new_particles;
-%             %}
-% 
-%             % opt 2: low variance sampling
-%             %
-%             M = 1/np;
-%             U = rand(1)*M;
-%             new_particles = zeros(size(pred_par));
-%             tmp_w = w(1);
-%             ii = 1;
-%             jj = 1;
-%             while (jj <= np)
-%                 while (tmp_w < U+(jj-1)*M)
-%                     ii = ii+1;
-%                     tmp_w = tmp_w+w(ii);
-%                 end
-%                 new_particles(:,jj) = pred_par(:,ii);
-%                 jj = jj + 1;
-%             end
-%             this.particles = new_particles;
-%             %}
-%         end
-
         function [particles,w] = PF(this,fld,sim,tt,ii,state,particles,w,y,flag)
             
             %particles = this.particles;
@@ -419,14 +359,14 @@ classdef RobotClass
                 if y == -100
                     % if the target is outside FOV.
                     %
-                    if FOV(jj)&&fld.map.V(ceil(state(1)),ceil(state(2)),ceil(particles(1,jj)),ceil(particles(2,jj)))
+                    if FOV(jj)
                         w(jj) = 10^-20;
                     else
                         w(jj) = 1;
                     end
                     %}
                 else
-                    if FOV(jj)&&fld.map.V(ceil(state(1)),ceil(state(2)),ceil(particles(1,jj)),ceil(particles(2,jj)))
+                    if FOV(jj)
                         if strcmp(sim.sensor_type,'ran')
                             w(jj) = P(jj);
                         end
@@ -537,7 +477,7 @@ classdef RobotClass
             end
             %}
             %
-            while num < 120
+            while num < 100
                 [this,tree,Reward,num] = this.simulate(fld,sim,1,num,tree,max_depth,eta,ii+1,tt,interpolated_points,a,B,w,pt,ps);
             end
             %}
@@ -772,7 +712,7 @@ classdef RobotClass
                 dist_all = vecnorm(z(1:2)-this.first_particles(1:2,:));
                 [mindist,id] = min(dist_all);
                 %reward = reward + 0.1/norm(state(1:2)-this.first_particles(1:2,id));
-                reward = reward + 0.1*(mindist-norm(state(1:2)-this.first_particles(1:2,id)));
+                reward = reward + 0.2*(mindist-norm(state(1:2)-this.first_particles(1:2,id)));
                 %}
 
                 % immediate reward (to be modified)
@@ -783,7 +723,7 @@ classdef RobotClass
                     jj = 1;
                     ii = 1;
                     while(ii<=N)
-                        if this.inFOV(state(1:3),B(:,jj)) == 0||fld.map.V(ceil(state(1)),ceil(state(2)),ceil(B(1,jj)),ceil(B(2,jj))) == 0
+                        if this.inFOV(state(1:3),B(:,jj)) == 0
                             B_tmp(:,jj) = [];
                         else
                             jj = jj + 1;
@@ -858,7 +798,7 @@ classdef RobotClass
                             tree_tmp(begin).r = rollout;
 
                             % rollout reuse
-                            %{
+                            %
                             % tic
                             T = size(tree_tmp(begin).hist,2);
                             for ii = 2:length(tree_tmp)
@@ -873,7 +813,7 @@ classdef RobotClass
                                             p = ps{id};
                                         end
 
-                                        z = node.state(1:3);
+                                        z = tree_tmp(ii).state(1:3);
                                         tmp = [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'];
 
                                         wrong = 0;
@@ -897,10 +837,13 @@ classdef RobotClass
                                                 state = [state;action(4)];
                                                 num = num + 1;
                                                 [this,tree_tmp,num] = this.expand_spec(sim,ii,num,tree_tmp,state,action,a);
-                                                
+
                                                 % backup
-                                                r = eta*rollout + this.MI(fld,sim,state,B_pre,w); % + dist 
+                                                r = eta*rollout + this.MI(fld,sim,state,B_pre,w); % + dist
                                                 tree_tmp = backup(this,tree_tmp,ii,r,eta);
+
+                                                tree_tmp(ii).a(:,kk) = [];
+                                                kk = kk - 1;
                                             end
                                         end
 
@@ -1367,17 +1310,13 @@ classdef RobotClass
             H0 = 0.5*size(R,1)*(log(2*pi)+1)+0.5*log(det(R));
             %H0 = 0.5*(log(2*pi)+1)+0.5*log(det(R));
             N = size(particles,2);
-            visibility = zeros(1,N);
-            for jj = 1:N
-                visibility(jj) = fld.map.V(ceil(state(1)),ceil(state(2)),ceil(particles(1,jj)),ceil(particles(2,jj)));
-            end
 
             if this.is_tracking
-                FOV = this.inFOV_red(state(1:3),particles).*visibility;
+                FOV = this.inFOV_red(state(1:3),particles);
             else
-                FOV = this.inFOV(state(1:3),particles).*visibility;
+                FOV = this.inFOV(state(1:3),particles);
             end
-            %FOV = inFOV(state(1:3),particles,1,r,pi/2).*visibility;
+            %FOV = inFOV(state(1:3),particles,1,r,pi/2);
 
             if ~any(FOV)
                 reward = 0;
@@ -1417,20 +1356,14 @@ classdef RobotClass
                 particles(:,flag(Cidx(mm,1),Cidx(mm,2))) = particles(:,flag(Cidx(mm,1),Cidx(mm,2))) + particles_tmp(:,mm).*w_tmp(mm)./w(flag(Cidx(mm,1),Cidx(mm,2)));
             end
             %
-            %%是否要修改 改了有问题（好像把atan2的突变问题解决后又没问题了）
-            %
-            visibility = zeros(1,N);
-            for jj = 1:N
-                visibility(jj) = fld.map.V(ceil(state(1)),ceil(state(2)),ceil(particles(1,jj)),ceil(particles(2,jj)));
-            end
-            %
+
             if this.is_tracking
-                FOV = this.inFOV_red(state(1:3),particles).*visibility;
+                FOV = this.inFOV_red(state(1:3),particles);
             else
-                FOV = this.inFOV(state(1:3),particles).*visibility;
+                FOV = this.inFOV(state(1:3),particles);
             end
             %}
-            %FOV = inFOV(state(1:3),particles,1,r,pi/2).*visibility;
+            %FOV = inFOV(state(1:3),particles,1,r,pi/2);
             %}
             %FOV = inFOV(state(1:3),particles,r);
 

@@ -75,10 +75,16 @@ classdef SimClass
 
             text(1,48,strcat('t=',num2str(ii)),"FontSize",20,"FontName",'Times New Roman');
 
+            %%%%%%
+
             subplot(1,2,2);
             hold on
 
-            plot(rbt.map.PC_map(1,:),rbt.map.PC_map(2,:),'.','Color',[0 0 0.5]);
+            % occupancy map
+            show(rbt.map.occ_map)
+
+            % point cloud map
+            % plot(rbt.map.PC_map(1,:),rbt.map.PC_map(2,:),'.','Color',[0 0 0.5]);
 
             %{
             tic
