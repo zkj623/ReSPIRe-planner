@@ -10,7 +10,7 @@ est_err_all = [];
 time_search_all = [];
 time_tracking_all = [];
 
-for zz = 1:5
+for zz = 1:10
 t_search = zeros(50,1);
 traj_length = zeros(50,1);
 t_loss = zeros(50,1);
@@ -19,7 +19,7 @@ time_search = zeros(50,1);
 time_tracking = zeros(50,1);
 runtime = zeros(50,1);
 
-for tt = 1:50 %1:50 %44 %47
+for tt = 1:10 %1:50 
 
 % set up parameters
 simSetup;
@@ -254,6 +254,10 @@ for ii = 1:sim_len
         end
         kk = kk+1;
     end
+
+    dist_all = vecnorm(rbt.state(1:2)-rbt.first_particles(1:2,:));
+    [mindist,id] = min(dist_all);
+    rbt.vir_tar = rbt.first_particles(1:2,id);
 
     %     for jj = size(rbt.particles,2)
     %         x = floor(rbt.particles(jj,1)/(rbt.map.size/2));

@@ -55,8 +55,12 @@ classdef RobotClass
         first_particles;
         first_w;
         hgrid;
+        vir_tar;
+
         tree;
         allstate;
+
+        a_hist;
         
         % map
         map;
@@ -133,8 +137,12 @@ classdef RobotClass
             this.first_particles = inPara.first_particles;
             this.first_w = inPara.first_w;
             this.hgrid = inPara.hgrid;
+            this.vir_tar = inPara.vir_tar;
+
             this.tree = inPara.tree;
             this.allstate = inPara.allstate;
+
+            this.a_hist = inPara.a_hist;
 
             this.map = inPara.map;
 
@@ -347,12 +355,12 @@ classdef RobotClass
                 %
             end
             for jj = 1:N
-                if any([0;0] > particles(1:2,jj))||any([50;50] < particles(1:2,jj))
+                if any([1;1] > particles(1:2,jj))||any([49;49] < particles(1:2,jj))
                     w(jj) = 0;
                     continue
                 end
                 [~,D] = knnsearch(this.map.PC_tree,particles(1:2,jj)');
-                if D < 0.5
+                if D < 1
                     w(jj) = 10^-20;
                     continue
                 end
@@ -439,6 +447,14 @@ classdef RobotClass
             root.state = this.state;%匀速运动v=1
             root.hist = [];
             root.a = a;
+
+            id = this.a_hist;
+            if id == 6
+                root.a(:,7) = [];
+            elseif id == 7
+                root.a(:,6) = [];
+            end
+            
             root.N = 0;
             root.Q = 0;
             root.parent = 0;
@@ -538,6 +554,7 @@ classdef RobotClass
                 end
                 this.traj = [this.traj [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2]];
                 this.planned_traj = [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2];
+                this.a_hist = id;
 
                 %% planning horizon 2
                 if ~isempty(tree(opt).children)
@@ -594,7 +611,7 @@ classdef RobotClass
                 K = 0.5;
             end
             alpha = 0.1;
-            control = [fld.target.control(tt,simIndex,1);fld.target.control(tt,simIndex,2)];
+            %control = [fld.target.control(tt,simIndex,1);fld.target.control(tt,simIndex,2)];
 
             if depth == 0
                 Reward = 0;
@@ -712,9 +729,7 @@ classdef RobotClass
                 end
 
                 %
-                dist_all = vecnorm(z(1:2)-this.first_particles(1:2,:));
-                [mindist,id] = min(dist_all);
-                reward = reward + 2/norm(state(1:2)-this.first_particles(1:2,id));
+                reward = reward + 3/norm(state(1:2)-this.vir_tar);
                 %reward = reward + 0.2*(mindist-norm(state(1:2)-this.first_particles(1:2,id)));
                 %}
 
@@ -1207,7 +1222,8 @@ classdef RobotClass
                     end
                 else
                     action_opt = [];
-                    target = [B(1,:)*w';B(2,:)*w'];
+                    %target = [B(1,:)*w';B(2,:)*w'];
+                    target = this.vir_tar;
                     mindis = 100000;
                     for jj = 1:size(node.a,2)
                         action = node.a(:,jj);
