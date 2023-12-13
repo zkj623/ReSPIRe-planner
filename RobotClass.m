@@ -579,39 +579,40 @@ classdef RobotClass
                             return
                         end
                     end
+                    
+                    num_a = begin;
+    
+                    %
+                    id = tree_tmp(num_a).a_num;
+                    if this.is_tracking
+                        p = pt{id};
+                    else
+                        p = ps{id};
+                    end
+    
+                    tmp = [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'];
+    
+                    wrong = 0;
+                    for jj = 1:21
+                        if any([1;1] >= tmp(1:2,jj))||any([49;49] <= tmp(1:2,jj))||this.map.region(ceil(tmp(1,jj)),ceil(tmp(2,jj))) < 0.3
+                            wrong = 1;
+                            break
+                        end
+                    end
+    
+                    if ~this.is_tracking
+                        if wrong
+                            %if any([0;0] >= tree_tmp(num_a).state(1:2))||any([50;50] <= tree_tmp(num_a).state(1:2))||any([0;0] >= tree_tmp(num_a).inter_state(1:2))||any([50;50] <= tree_tmp(num_a).inter_state(1:2))||fld.map.region_exp(ceil(tree_tmp(num_a).state(1)),ceil(tree_tmp(num_a).state(2))) == 0||fld.map.region_exp(ceil(tree_tmp(num_a).inter_state(1)),ceil(tree_tmp(num_a).inter_state(2))) == 0
+                            tree_tmp(num_a).N = tree_tmp(num_a).N+1;
+                            %%%% need to be modified
+                            tree_tmp(num_a).Q = -3;
+                            Reward = -3;
+                            return
+                        end
+                    end
+                %}
                 end
                 
-                num_a = begin;
-
-                %
-                id = tree_tmp(num_a).a_num;
-                if this.is_tracking
-                    p = pt{id};
-                else
-                    p = ps{id};
-                end
-
-                tmp = [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'];
-
-                wrong = 0;
-                for jj = 1:21
-                    if any([1;1] >= tmp(1:2,jj))||any([49;49] <= tmp(1:2,jj))||this.map.region(ceil(tmp(1,jj)),ceil(tmp(2,jj))) < 0.3
-                        wrong = 1;
-                        break
-                    end
-                end
-
-                if ~this.is_tracking
-                    if wrong
-                        %if any([0;0] >= tree_tmp(num_a).state(1:2))||any([50;50] <= tree_tmp(num_a).state(1:2))||any([0;0] >= tree_tmp(num_a).inter_state(1:2))||any([50;50] <= tree_tmp(num_a).inter_state(1:2))||fld.map.region_exp(ceil(tree_tmp(num_a).state(1)),ceil(tree_tmp(num_a).state(2))) == 0||fld.map.region_exp(ceil(tree_tmp(num_a).inter_state(1)),ceil(tree_tmp(num_a).inter_state(2))) == 0
-                        tree_tmp(num_a).N = tree_tmp(num_a).N+1;
-                        %%%% need to be modified
-                        tree_tmp(num_a).Q = -5;
-                        Reward = -5;
-                        return
-                    end
-                end
-                %}
 
                 num_a = begin;
                 tree_tmp(num_a).N = tree_tmp(num_a).N+1;
