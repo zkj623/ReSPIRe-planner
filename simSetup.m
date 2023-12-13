@@ -116,7 +116,7 @@ inPara_rbt = struct;
 % inPara_rbt.traj = rbt_state(tt,:)';
 inPara_rbt.state = [5;8;0;1];
 %inPara_rbt.state = [5;17;pi;1];
-% inPara_rbt.state = [15;5;0;1];
+inPara_rbt.state = [15;5;0;1];
 inPara_rbt.traj = inPara_rbt.state(1:3);
 inPara_rbt.planned_traj = [];
 % z(3) = pi/2;
@@ -240,7 +240,7 @@ a = zeros(5,7); % action space
 interpolated_points = zeros(7,2,3);
 ps = {};
 inputs = [30 pi/4;30 pi/8;30 -pi/4;30 -pi/8;30 0;0 pi/4;0 -pi/4];
-% 
+%{ 
 a = zeros(5,7); % action space
 interpolated_points = zeros(7,2,3);
 ps = {};
@@ -248,6 +248,7 @@ ps = {};
 inputs = [30 pi/4;30 pi/8;30 -pi/4;30 -pi/8;30 0;2 -pi/4;2 pi/4];
 inputs = [30 pi/4;30 pi/8;30 -pi/4;30 -pi/8;30 0;2 -pi/6;2 pi/6];
 % inputs = [20 pi/4;20 pi/8;20 -pi/4;20 -pi/8;20 0;5 -pi/4;5 pi/4];
+%}
 
 for ii = 1:size(a,2)
 [~,ps{ii}] = ode45(@(t,y)derivative(kinematicModel,y,inputs(ii,:)),tspan,initialState);

@@ -97,7 +97,7 @@ for ii = 1:sim_len
     fld.target.traj = [fld.target.traj;fld.target.pos'];
 
     rbt.is_tracking = 0;
-    if rbt.inFOV(rbt.state,fld.target.pos)%&&fld.map.V(ceil(rbt.state(1)),ceil(rbt.state(2)),ceil(fld.target.pos(1)),ceil(fld.target.pos(2)))
+    if rbt.inFOV(rbt.state,fld.target.pos)&&fld.map.V(ceil(rbt.state(1)),ceil(rbt.state(2)),ceil(fld.target.pos(1)),ceil(fld.target.pos(2)))
         rbt.is_tracking = 1;
     end
 
@@ -233,7 +233,7 @@ for ii = 1:sim_len
     end
     ll = 1;
     for mm = 1:size(particles_tmp,2)
-        if w(flag(Cidx(mm,1),Cidx(mm,2))) < 0.3
+        if w(flag(Cidx(mm,1),Cidx(mm,2))) < 0.01
             particles_tmp2(:,flag(Cidx(mm,1),Cidx(mm,2))) = particles_tmp2(:,flag(Cidx(mm,1),Cidx(mm,2))) + particles_tmp(:,ll).*w_tmp(ll)./w(flag(Cidx(mm,1),Cidx(mm,2)));
             particles_tmp(:,ll) = [];
             w_tmp(ll) = [];
@@ -247,7 +247,7 @@ for ii = 1:sim_len
 
     kk = 1;
     for jj = 1:size(rbt.first_particles,2)
-        if norm(rbt.first_particles(:,kk)) == 0 || rbt.first_w(kk) < 0.10
+        if norm(rbt.first_particles(:,kk)) == 0 || rbt.first_w(kk) < 0.05 %0.10
             rbt.first_particles(:,kk) = [];
             rbt.first_w(kk) = [];
             kk = kk-1;

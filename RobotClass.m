@@ -235,19 +235,19 @@ classdef RobotClass
 
             if strcmp(this.sensor_type,'rb')
                 % range-bearing sensor
-                if this.inFOV(this.state,tar_pos)
+                if this.inFOV(this.state,tar_pos)&&fld.map.V(ceil(this.state(1)),ceil(this.state(2)),ceil(tar_pos(1)),ceil(tar_pos(2)))
                     y = this.h(tar_pos,this.state)+(mvnrnd([0;0],this.R))';
                 else
                     y = [-100;-100];
                 end
             elseif strcmp(this.sensor_type,'ran')
-                if this.inFOV(this.state,tar_pos)
+                if this.inFOV(this.state,tar_pos)&&fld.map.V(ceil(this.state(1)),ceil(this.state(2)),ceil(tar_pos(1)),ceil(tar_pos(2)))
                     y = this.h(tar_pos,this.state)+normrnd(0,this.R);
                 else
                     y = -100;
                 end
             elseif strcmp(this.sensor_type,'lin')
-                if this.inFOV(this.state,tar_pos)
+                if this.inFOV(this.state,tar_pos)&&fld.map.V(ceil(this.state(1)),ceil(this.state(2)),ceil(tar_pos(1)),ceil(tar_pos(2)))
                     y = this.h(tar_pos,this.state)+(mvnrnd([0;0],this.R))';
                 else
                     y = [-100;-100];
@@ -348,7 +348,7 @@ classdef RobotClass
             end
             for jj = 1:N
                 if any([0;0] > particles(1:2,jj))||any([50;50] < particles(1:2,jj))
-                    w(jj) = 10^-20;
+                    w(jj) = 0;
                     continue
                 end
                 [~,D] = knnsearch(this.map.PC_tree,particles(1:2,jj)');
@@ -359,14 +359,14 @@ classdef RobotClass
                 if y == -100
                     % if the target is outside FOV.
                     %
-                    if FOV(jj)
+                    if FOV(jj)&&fld.map.V(ceil(state(1)),ceil(state(2)),ceil(particles(1,jj)),ceil(particles(2,jj)))
                         w(jj) = 10^-20;
                     else
                         w(jj) = 1;
                     end
                     %}
                 else
-                    if FOV(jj)
+                    if FOV(jj)&&fld.map.V(ceil(state(1)),ceil(state(2)),ceil(particles(1,jj)),ceil(particles(2,jj)))
                         if strcmp(sim.sensor_type,'ran')
                             w(jj) = P(jj);
                         end
@@ -638,7 +638,7 @@ classdef RobotClass
                 
                 num_a = begin;
 
-                %{
+                %
                 id = tree_tmp(num_a).a_num;
                 if this.is_tracking
                     p = pt{id};
@@ -650,9 +650,12 @@ classdef RobotClass
 
                 wrong = 0;
                 for jj = 1:21
-                    if any([1;1] >= tmp(1:2,jj))||any([49;49] <= tmp(1:2,jj))||this.map.region(ceil(tmp(1,jj)),ceil(tmp(2,jj))) < 0.3
-                        wrong = 1;
-                        break
+                    if mod(jj-1,5)==0
+                        [~,D] = knnsearch(this.map.PC_tree,tmp(1:2,jj)');
+                        if any([1;1] >= tmp(1:2,jj))||any([49;49] <= tmp(1:2,jj))||D < 1
+                            wrong = 1;
+                            break
+                        end
                     end
                 end
 
@@ -661,8 +664,8 @@ classdef RobotClass
                         %if any([0;0] >= tree_tmp(num_a).state(1:2))||any([50;50] <= tree_tmp(num_a).state(1:2))||any([0;0] >= tree_tmp(num_a).inter_state(1:2))||any([50;50] <= tree_tmp(num_a).inter_state(1:2))||fld.map.region_exp(ceil(tree_tmp(num_a).state(1)),ceil(tree_tmp(num_a).state(2))) == 0||fld.map.region_exp(ceil(tree_tmp(num_a).inter_state(1)),ceil(tree_tmp(num_a).inter_state(2))) == 0
                         tree_tmp(num_a).N = tree_tmp(num_a).N+1;
                         %%%% need to be modified
-                        tree_tmp(num_a).Q = -100;
-                        Reward = -100;
+                        tree_tmp(num_a).Q = -5;
+                        Reward = -5;
                         return
                     end
                 end
@@ -689,7 +692,7 @@ classdef RobotClass
                 for ii = 1:size(B,2)
                     %[~,D] = knnsearch(this.map.PC_tree,B(1:2,jj)');
                     %if any([1;1] > B(1:2,jj))||any([49;49] < B(1:2,jj))%||D < 0.5
-                     if any([1;1] > B(1:2,jj))||any([49;49] < B(1:2,jj))||this.map.region(ceil(B(1,jj)),ceil(B(2,jj))) < 0.3
+                    if any([1;1] > B(1:2,jj))||any([49;49] < B(1:2,jj))||this.map.region(ceil(B(1,jj)),ceil(B(2,jj))) < 0.3
                         B(:,jj) = [];
                         w(jj) = [];
                         continue
@@ -711,8 +714,8 @@ classdef RobotClass
                 %
                 dist_all = vecnorm(z(1:2)-this.first_particles(1:2,:));
                 [mindist,id] = min(dist_all);
-                %reward = reward + 0.1/norm(state(1:2)-this.first_particles(1:2,id));
-                reward = reward + 0.2*(mindist-norm(state(1:2)-this.first_particles(1:2,id)));
+                reward = reward + 2/norm(state(1:2)-this.first_particles(1:2,id));
+                %reward = reward + 0.2*(mindist-norm(state(1:2)-this.first_particles(1:2,id)));
                 %}
 
                 % immediate reward (to be modified)
@@ -723,7 +726,7 @@ classdef RobotClass
                     jj = 1;
                     ii = 1;
                     while(ii<=N)
-                        if this.inFOV(state(1:3),B(:,jj)) == 0
+                        if this.inFOV(state(1:3),B(:,jj)) == 0||fld.map.V(ceil(state(1)),ceil(state(2)),ceil(B(1,jj)),ceil(B(2,jj))) == 0
                             B_tmp(:,jj) = [];
                         else
                             jj = jj + 1;
@@ -818,7 +821,7 @@ classdef RobotClass
 
                                         wrong = 0;
                                         for ll = 1:21
-                                            if mod(ll-1,5)
+                                            if mod(ll-1,5)==0
                                                 [~,D] = knnsearch(this.map.PC_tree,tmp(1:2,ll)');
                                                 if any([1;1] >= tmp(1:2,ll))||any([49;49] <= tmp(1:2,ll))||D < 1
                                                     wrong = 1;
@@ -955,7 +958,7 @@ classdef RobotClass
             node = tree_tmp(begin);
             state = zeros(4,1);
             if tmp == 1 %action
-                %{
+                %
                 ii = randperm(size(tree_tmp(begin).a,2),1);
                 action = tree_tmp(begin).a(:,ii);
                 tree_tmp(begin).a(:,ii) = [];
@@ -971,7 +974,7 @@ classdef RobotClass
 
                 tree_tmp(begin).children_maxnum = tree_tmp(begin).children_maxnum-1;
                 %}
-                %
+                %{
                 while(1)
                     flag = 0;
                     inregion = 1;
@@ -1008,7 +1011,7 @@ classdef RobotClass
                     
                     wrong = 0;
                     for jj = 1:21
-                        if mod(jj-1,5)
+                        if mod(jj-1,5)==0
                             [~,D] = knnsearch(this.map.PC_tree,tmp(1:2,jj)');
                             if any([1;1] >= tmp(1:2,jj))||any([49;49] <= tmp(1:2,jj))||D < 1
                                 wrong = 1;
@@ -1185,7 +1188,7 @@ classdef RobotClass
 
                         wrong = 0;
                         for kk = 1:21
-                            if mod(kk-1,10)
+                            if mod(kk-1,10)==00
                                 [~,D] = knnsearch(this.map.PC_tree,tmp(1:2,kk)');
                                 if any([1;1] >= tmp(1:2,kk))||any([49;49] <= tmp(1:2,kk))||D < 1
                                     wrong = 1;
@@ -1226,7 +1229,7 @@ classdef RobotClass
 
                         wrong = 0;
                         for kk = 1:21
-                            if mod(kk-1,10)
+                            if mod(kk-1,10)==0
                                 [~,D] = knnsearch(this.map.PC_tree,tmp(1:2,kk)');
                                 if any([1;1] >= tmp(1:2,kk))||any([49;49] <= tmp(1:2,kk))||D < 1
                                     wrong = 1;
@@ -1310,13 +1313,17 @@ classdef RobotClass
             H0 = 0.5*size(R,1)*(log(2*pi)+1)+0.5*log(det(R));
             %H0 = 0.5*(log(2*pi)+1)+0.5*log(det(R));
             N = size(particles,2);
+            visibility = zeros(1,N);
+            for jj = 1:N
+                visibility(jj) = fld.map.V(ceil(state(1)),ceil(state(2)),ceil(particles(1,jj)),ceil(particles(2,jj)));
+            end
 
             if this.is_tracking
-                FOV = this.inFOV_red(state(1:3),particles);
+                FOV = this.inFOV_red(state(1:3),particles).*visibility;
             else
-                FOV = this.inFOV(state(1:3),particles);
+                FOV = this.inFOV(state(1:3),particles).*visibility;
             end
-            %FOV = inFOV(state(1:3),particles,1,r,pi/2);
+            %FOV = inFOV(state(1:3),particles,1,r,pi/2).*visibility;
 
             if ~any(FOV)
                 reward = 0;
@@ -1357,13 +1364,18 @@ classdef RobotClass
             end
             %
 
+            visibility = zeros(1,N);
+            for jj = 1:N
+                visibility(jj) = fld.map.V(ceil(state(1)),ceil(state(2)),ceil(particles(1,jj)),ceil(particles(2,jj)));
+            end
+            %
             if this.is_tracking
-                FOV = this.inFOV_red(state(1:3),particles);
+                FOV = this.inFOV_red(state(1:3),particles).*visibility;
             else
-                FOV = this.inFOV(state(1:3),particles);
+                FOV = this.inFOV(state(1:3),particles).*visibility;
             end
             %}
-            %FOV = inFOV(state(1:3),particles,1,r,pi/2);
+            %FOV = inFOV(state(1:3),particles,1,r,pi/2).*visibility;
             %}
             %FOV = inFOV(state(1:3),particles,r);
 

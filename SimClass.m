@@ -81,10 +81,10 @@ classdef SimClass
             hold on
 
             % occupancy map
-            show(rbt.map.occ_map)
+            % show(rbt.map.occ_map)
 
             % point cloud map
-            % plot(rbt.map.PC_map(1,:),rbt.map.PC_map(2,:),'.','Color',[0 0 0.5]);
+            plot(rbt.map.PC_map(1,:),rbt.map.PC_map(2,:),'.','Color',[0 0 0.5]);
 
             %{
             tic
