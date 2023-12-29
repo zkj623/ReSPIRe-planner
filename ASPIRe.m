@@ -21,8 +21,8 @@ runtime = zeros(50,1);
 
 %rng(0)
 
-%for tt = [2 3 5 6 8 10] %1:50 %44 %47
-for tt = 2
+for tt = [2 3 5 6 8 10] %1:50 %44 %47
+%for tt = 2
 
 % set up parameters
 simSetup;
@@ -34,8 +34,13 @@ optz = [];
 optu = [];
 
 % save figures to video
+path = sprintf('video/%s/',datetime('today'));
+if ~exist(path,'dir')
+    mkdir(path);
+end
+
 if save_video
-    vidObj = VideoWriter(sprintf('unknown_%s_%s_%d_%d_%s.avi',plan_mode,sensor_type,zz,tt,datetime('today')));
+    vidObj = VideoWriter(strcat(path,sprintf('unknown_%s_%s_%d_%d_%s.avi',plan_mode,sensor_type,zz,tt,datetime('today'))));
     vidObj.FrameRate = 3;
     open(vidObj);
 end

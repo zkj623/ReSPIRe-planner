@@ -538,11 +538,11 @@ classdef RobotClass
                 planlen = 50;
             end
 
-            %
+            %{
             B = this.particles;
             w = this.w;
             %}
-            %{
+            %
             B = this.loc_par;
             w = this.loc_w;
             %}
@@ -1270,7 +1270,7 @@ classdef RobotClass
                 else
                     action_opt = [];
                     target = [B(1,:)*w';B(2,:)*w'];
-                    %target = this.vir_tar;
+                    target = this.vir_tar;
                     mindis = 100000;
                     max_rew = -100000;
                     for jj = 1:size(node.a,2)
@@ -1360,7 +1360,7 @@ classdef RobotClass
                         %
                         reward = MI(this,fld,sim,node.state,B,w);
 
-                        %reward = 3*exp(-norm(node.state(1:2)-target));
+                        reward = 3*exp(-norm(node.state(1:2)-target));
                         %}
                         %reward = MI(this,fld,sim,node.state,B,w) + exp(-norm(node.state(1:2)-target));
 
