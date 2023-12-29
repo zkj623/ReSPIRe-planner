@@ -80,7 +80,8 @@ switch tar_model
         target.Q = 0.25*eye(2); %0.04 % Covariance of process noise model for the target
         %}
 end
-target.Q_search = [0.01 0 0;0 0.01 0;0 0 0.01];
+target.Q_search = [0.05 0 0;0 0.05 0;0 0 0.01];
+%target.Q_search = [1 0 0;0 1 0;0 0 0.01];
 %target.Q_search = zeros(3);
 target.Q_tracking = [1 0 0;0 1 0;0 0 0.01];
 
@@ -120,8 +121,9 @@ inPara_rbt = struct;
 inPara_rbt.state = [5;8;0;1];
 %inPara_rbt.state = [5;17;pi;1];
 inPara_rbt.state = [15;5;0;1];
-inPara_rbt.state = [45;45.5;0;1];
+%inPara_rbt.state = [45;40;pi/2;1];
 inPara_rbt.state = [rbt_state(tt,:)';1];
+%inPara_rbt.state = [5;8;pi/2;1];
 
 inPara_rbt.traj = inPara_rbt.state(1:3);
 inPara_rbt.planned_traj = [];
@@ -191,7 +193,7 @@ end
 
 % estimation initialization
 
-inPara_rbt.N = 100;
+inPara_rbt.N = 500;
 % inPara_rbt.w = ones(1,inPara_rbt.N)/inPara_rbt.N;
 
 switch prior_case
@@ -230,7 +232,7 @@ inPara_rbt.est_pos = inPara_rbt.particles*inPara_rbt.w';
 inPara_rbt.first_particles = [];
 inPara_rbt.first_w = [];
 inPara_rbt.hgrid = [[map.size/2;0;0;0] [map.size/2;map.size/2;0;0] [map.size/2;0;map.size/2;0] [map.size/2;map.size/2;map.size/2;0]];
-inPara_rbt.vir_tar = [];
+inPara_rbt.vir_tar = [-1;-1];
 
 %     error(ii) = norm(state_estimation(1:2)-tar_pos(1:2));
 inPara_rbt.P = {[100 0; 0 100];[100 0; 0 100];[100 0; 0 100]};

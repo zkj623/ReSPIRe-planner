@@ -19,7 +19,10 @@ time_search = zeros(50,1);
 time_tracking = zeros(50,1);
 runtime = zeros(50,1);
 
-for tt = 1:10 %1:50 %44 %47
+%rng(0)
+
+%for tt = [2 3 5 6 8 10] %1:50 %44 %47
+for tt = 2
 
 % set up parameters
 simSetup;
@@ -96,11 +99,6 @@ for ii = 1:sim_len
 
     fld.target.traj = [fld.target.traj;fld.target.pos'];
 
-    rbt.is_tracking = 0;
-    if rbt.inFOV(rbt.state,fld.target.pos)&&fld.map.V(ceil(rbt.state(1)),ceil(rbt.state(2)),ceil(fld.target.pos(1)),ceil(fld.target.pos(2)))
-        rbt.is_tracking = 1;
-    end
-
     %% target position estimation
     rbt.y = rbt.sensorGen(fld);
 
@@ -123,6 +121,8 @@ for ii = 1:sim_len
         end
     end
 
+    %ranges = ranges - 0.1;
+
     scan = lidarScan(ranges,angles);
 
     insertRay(rbt.map.occ_map,rbt.state(1:3)',scan,maxrange);
@@ -137,6 +137,13 @@ for ii = 1:sim_len
     end
     rbt.map.region = 1-region1;
     rbt.map.region_exp = rbt.map.region;
+
+    rbt.is_tracking = 0;
+    %rbt.inFOV(rbt.state,fld.target.pos)
+    %if rbt.inFOV(rbt.state,fld.target.pos)&&fld.map.V(ceil(rbt.state(1)),ceil(rbt.state(2)),ceil(fld.target.pos(1)),ceil(fld.target.pos(2)))
+    if rbt.y(1) ~= -100
+        rbt.is_tracking = 1;
+    end
 
     %% particle filtering
     [rbt.particles,rbt.w] = rbt.PF(fld,sim,tt,ii,rbt.state,rbt.particles,rbt.w,rbt.y,1);
@@ -163,18 +170,95 @@ for ii = 1:sim_len
             flag(id1,id2) = N;
         end
     end
-    %N
+
+    rbt.h_particles = repmat(hpar,N,1);
+
     particles_tmp = particles;
     w_tmp = w;
     particles = zeros(3,N);
     w = zeros(1,N);
     for mm = 1:size(particles_tmp,2)
-        w(flag(Cidx(mm,1),Cidx(mm,2))) = w(flag(Cidx(mm,1),Cidx(mm,2))) + w_tmp(mm);
+        id = flag(Cidx(mm,1),Cidx(mm,2));
+        w(id) = w(id) + w_tmp(mm);
     end
     for mm = 1:size(particles_tmp,2)
-        particles(:,flag(Cidx(mm,1),Cidx(mm,2))) = particles(:,flag(Cidx(mm,1),Cidx(mm,2))) + particles_tmp(:,mm).*w_tmp(mm)./w(flag(Cidx(mm,1),Cidx(mm,2)));
+        id = flag(Cidx(mm,1),Cidx(mm,2));
+        particles(:,id) = particles(:,id) + particles_tmp(:,mm).*w_tmp(mm)./w(id);
+        rbt.h_particles(id).third_par = [rbt.h_particles(id).third_par particles_tmp(:,mm)];
+        rbt.h_particles(id).third_w = [rbt.h_particles(id).third_w w_tmp(mm)];
     end
 
+    for jj = 1:size(rbt.h_particles,1)
+        rbt.h_particles(jj).num = jj;
+        rbt.h_particles(jj).first_w = w(jj);
+        rbt.h_particles(jj).first_par = particles(:,jj);
+    end
+
+    rbt.first_particles = particles;
+    rbt.first_w = w;
+
+    %{
+    kk = 1;
+    for jj = 1:size(rbt.first_particles,2)
+        if norm(rbt.first_particles(:,kk)) == 0 || rbt.first_w(kk) < 0.05 %0.10
+            rbt.first_particles(:,kk) = [];
+            rbt.first_w(kk) = [];
+            kk = kk-1;
+        end
+        kk = kk+1;
+    end
+    %}
+
+    flg = 0;
+    idx = ceil(rbt.vir_tar(1)/grid_size);
+    idy = ceil(rbt.vir_tar(2)/grid_size);
+    for jj = 1:size(rbt.first_particles,2)
+        idx_tmp = ceil(rbt.first_particles(1,jj)/grid_size);
+        idy_tmp = ceil(rbt.first_particles(2,jj)/grid_size);
+        if idx_tmp == idx && idy_tmp == idy && rbt.first_w(jj) > 0.05
+            flg = 1;
+            tmp = jj;
+            break
+        end
+    end
+
+    if flg == 0
+        dist_all = vecnorm(rbt.state(1:2)-rbt.first_particles(1:2,:));
+        %     dist_all = dist_all.*exp(w);
+        [dist_sort,I] = sort(dist_all);
+        w = w(I);
+        for jj = 1:size(dist_sort,2)
+            if w(jj)>0.05
+                id = jj;
+                break
+            end
+        end
+        % [mindist,id] = min(dist_all);
+        rbt.vir_tar = rbt.first_particles(1:2,I(id));
+
+        rbt.loc_par = rbt.h_particles(I(id)).third_par;
+        rbt.loc_w = rbt.h_particles(I(id)).third_w;
+    else
+        %{
+        dist_all = vecnorm(rbt.state(1:2)-rbt.first_particles(1:2,:));
+        %     dist_all = dist_all.*exp(w);
+        [dist_sort,I] = sort(dist_all);
+        w = w(I);
+        for jj = 1:size(dist_sort,2)
+            if w(jj)>0.2&&dist_all(jj)<10
+                tmp = jj;
+                break
+            end
+        end
+        %}
+
+        rbt.vir_tar = rbt.first_particles(1:2,tmp);
+
+        rbt.loc_par = rbt.h_particles(tmp).third_par;
+        rbt.loc_w = rbt.h_particles(tmp).third_w;
+    end
+
+    %{
     Cidx = zeros(size(particles,2),2);
     flag = zeros(2,2);
     N = 0;
@@ -207,23 +291,7 @@ for ii = 1:sim_len
         end
         ll = ll+1;
     end
-
-    rbt.first_particles = [particles_tmp particles_tmp2];
-    rbt.first_w = [w_tmp w];
-
-    kk = 1;
-    for jj = 1:size(rbt.first_particles,2)
-        if norm(rbt.first_particles(:,kk)) == 0 || rbt.first_w(kk) < 0.05 %0.10
-            rbt.first_particles(:,kk) = [];
-            rbt.first_w(kk) = [];
-            kk = kk-1;
-        end
-        kk = kk+1;
-    end
-
-    dist_all = vecnorm(rbt.state(1:2)-rbt.first_particles(1:2,:));
-    [mindist,id] = min(dist_all);
-    rbt.vir_tar = rbt.first_particles(1:2,id);
+    %}
 
     %     for jj = size(rbt.particles,2)
     %         x = floor(rbt.particles(jj,1)/(rbt.map.size/2));
@@ -254,6 +322,7 @@ for ii = 1:sim_len
 %         kk = kk + 1;
 %     end
 
+%
     if ii > 1
         wrong = 0;
         for jj = 0:20
@@ -269,8 +338,10 @@ for ii = 1:sim_len
             break
         end
     end
+%}
 
     %% robot motion planning
+    %
     tic
 
     if strcmp(plan_mode,'NBV')
@@ -287,6 +358,7 @@ for ii = 1:sim_len
     %rbt.traj = [rbt.traj,optz];
 
     list(ii,1:length(rbt.tree)) = rbt.tree;
+    %}
 
     % draw plot
     sim.plot_rbt_map(rbt,fld,tt,ii);

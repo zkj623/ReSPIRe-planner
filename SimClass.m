@@ -93,6 +93,7 @@ classdef SimClass
             end
             %}
             plot(rbt.particles(1,:),rbt.particles(2,:),'.','Color',[0 1 0.5]);
+            plot(rbt.loc_par(1,:),rbt.loc_par(2,:),'.','Color',[0.9290 0.6940 0.1250]);
             plot(rbt.est_pos(1),rbt.est_pos(2),"^",'Color','r','MarkerFaceColor','r',MarkerSize=15);
 
             if ~rbt.is_tracking
