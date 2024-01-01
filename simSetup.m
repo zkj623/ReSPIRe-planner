@@ -4,9 +4,10 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% Simulation Setup
-importfile('Case.mat');
+%importfile('Case.mat'); % ablation study
 % importfile('APFT_small_scene1.mat');
 importfile('structured_map.mat');
+importfile('scenario.mat'); % comparison
 
 traj_rbt = cell(5,50);
 particles_all = cell(5,50,200);
@@ -57,6 +58,10 @@ target.pos = [45;45.5;0];
 target.pos = [22;18;0];
 
 target.pos = targetPose(tt,:)';
+target.pos = [targetPose(tt,1,1);targetPose(tt,1,2);targetPose(tt,1,3)];
+%target.pos = [45;45.5;0];
+
+target.targetPose = targetPose;
 
 switch tar_model
     case 'static'
@@ -80,10 +85,11 @@ switch tar_model
         target.Q = 0.25*eye(2); %0.04 % Covariance of process noise model for the target
         %}
 end
-target.Q_search = [0.05 0 0;0 0.05 0;0 0 0.01];
+target.Q_search = [0.05 0;0 0.05];
 %target.Q_search = [1 0 0;0 1 0;0 0 0.01];
 %target.Q_search = zeros(3);
-target.Q_tracking = [1 0 0;0 1 0;0 0 0.01];
+target.Q_tracking = [1 0;0 1];
+%target.Q_tracking = [0.05 0;0 0.05];
 
 target.model_idx = 1;
 target.traj = target.pos';
@@ -104,7 +110,6 @@ grid_step = 0.5; % the side length of a probability cell
 %map.poly = poly;
 map.region = 1-region1;
 map.region_exp = 1-region;
-map.V = V;
 map.occ_map = occ_map;
 
 inPara_fld = struct('fld_cor',[xMin,xMax,yMin,yMax],'target',target,'dt',dt,'map',map);
@@ -123,9 +128,10 @@ inPara_rbt.state = [5;8;0;1];
 inPara_rbt.state = [15;5;0;1];
 %inPara_rbt.state = [45;40;pi/2;1];
 inPara_rbt.state = [rbt_state(tt,:)';1];
-%inPara_rbt.state = [5;8;pi/2;1];
+%inPara_rbt.state = [15;5;0;1];
 
-inPara_rbt.traj = inPara_rbt.state(1:3);
+%inPara_rbt.traj = inPara_rbt.state(1:3);
+inPara_rbt.traj = [];
 inPara_rbt.planned_traj = [];
 % z(3) = pi/2;
 %[48;48;pi;1];
@@ -148,10 +154,9 @@ inPara_rbt.target = target;
 
 map = {};
 map.size = 50;
-map.region = zeros(50,50);
-map.region_exp = zeros(50,50);
-map.V = zeros(50,50,50,50);
-map.occ_map = occupancyMap(50,50,1);
+map.region = zeros(map.size*5);
+map.region_exp = zeros(map.size*5);
+map.occ_map = occupancyMap(50,50,5);
 inPara_rbt.map = map;
 
 % sensor
@@ -205,9 +210,9 @@ switch prior_case
         inPara_rbt.particles = [inPara_rbt.particles;zeros(1,size(inPara_rbt.particles,2))];
         %}
         %inPara_rbt.particles = mvnrnd(target.pos-[10;10;0],[50 0 0;0 50 0;0 0 0.005],inPara_rbt.N)';
-        inPara_rbt.particles = mvnrnd([20;10;0],[50 0 0;0 50 0;0 0 0.005],inPara_rbt.N)';
+        %inPara_rbt.particles = mvnrnd([38;38;0],[50 0 0;0 50 0;0 0 0.005],inPara_rbt.N)';
         %[38;38;0]
-        inPara_rbt.particles = mvnrnd(particle_mean(tt,:)',[50 0 0;0 50 0;0 0 0.005],inPara_rbt.N)';
+        inPara_rbt.particles = mvnrnd(particle_mean(tt,:)',[50 0;0 50],inPara_rbt.N)';
     case 'multimodal'
         noise1 = zeros(1,3);
         noise1(1) = noise_point(tt,1,1);

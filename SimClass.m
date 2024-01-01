@@ -82,7 +82,9 @@ classdef SimClass
             axis([0,50,0,50]);
 
             %%%%%%
-            show(rbt.map.occ_map)
+            map_tmp = copy(rbt.map.occ_map);
+            inflate(map_tmp,0.5);
+            show(map_tmp)
 
             %{
             for jj = 1:size(rbt.particles,2)
@@ -102,8 +104,10 @@ classdef SimClass
                 end
             end
 
-            %plot(fld.target.traj(1:ii+1,1),fld.target.traj(1:ii+1,2),'-','Color',[0.13333 0.5451 0.13333],LineWidth=3);
             plot(rbt.traj(1,1:end-1),rbt.traj(2,1:end-1),'-','Color','r',MarkerSize=0.1,LineWidth=3);
+            %
+            %}
+
             if ~isempty(rbt.planned_traj)
                 plot(rbt.planned_traj(1,1:end),rbt.planned_traj(2,1:end),'-','Color','g',MarkerSize=0.1,LineWidth=3);
             end

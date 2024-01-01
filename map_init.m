@@ -25,14 +25,18 @@ polyin(15).points = [33,32,32,40,40,33;22,22,28,28,27,27];
 polyin(15).points(1,:) = polyin(15).points(1,:)+1;
 polyin(15).points(2,:) = polyin(15).points(2,:)-2;
 polyin(16).points = [25,25,26,26;27,32,32,27];
+
+for ii = 1:num_obstacle
+    polyin(ii).points = polyin(ii).points*5;
+end
 %}
 %
-region1 = zeros(50,50);
+region1 = zeros(250,250);
 for ii = 1:size(region1,1)
     for jj = 1:size(region1,2)
         for kk = 1:length(polyin)
-            if isInside(polyin(kk),[ii-0.8;jj-0.8]) == 1||isInside(polyin(kk),[ii-0.2;jj-0.2]) == 1||isInside(polyin(kk),[ii-0.2;jj-0.8]) == 1||isInside(polyin(kk),[ii-0.8;jj-0.2]) == 1
-            %if isInside(polyin(kk),[ii-0.5;jj-0.5]) == 1
+            %if isInside(polyin(kk),[ii-0.8;jj-0.8]) == 1||isInside(polyin(kk),[ii-0.2;jj-0.2]) == 1||isInside(polyin(kk),[ii-0.2;jj-0.8]) == 1||isInside(polyin(kk),[ii-0.8;jj-0.2]) == 1
+            if isInside(polyin(kk),[ii-0.1;jj-0.1]) == 1
                 region1(ii,jj) = 1;%infeasible
                 break
             end
@@ -46,13 +50,21 @@ region_tmp1 = region1';
 for ii = 1:size(region_tmp1,2)
     region1(ii,:) = region_tmp1(size(region_tmp1,2)-ii+1,:);
 end
-occ_map = occupancyMap(region1,1);
+occ_map = occupancyMap(region1,5);
 region1 = region_tmp;
 
-% map.ProbabilitySaturation = [0.0001,0.9999];
-
+figure
 show(occ_map)
 set(gcf,'position',[600,200,1920,1080]);
+
+region_tmp1 = occupancyMatrix(occ_map);
+
+% inflate(occ_map,0.5);
+% figure
+% show(occ_map)
+% set(gcf,'position',[600,200,1920,1080]);
+% 
+% region_tmp2 = occupancyMatrix(occ_map);
 
 % pose = [5,5,pi/4];
 % ranges = 6*ones(100,1);
@@ -104,13 +116,6 @@ end
 
 region = 1-region1;
 
-% for kk = 1:length(polyin)
-%     if isVisible(polyin(kk),[13-0.5;13-0.5],[15-0.5,12-0.5],region) == 0
-%         V_fl = 0;%invisible
-%         break
-%     end
-% end
-
 %visibility judgement
 %{
 tic
@@ -144,7 +149,7 @@ for ii = 1:size(V,1)
 end
 toc
 %}
-%
+%{
 V = -ones(50,50,50,50);
 for ii = 1:size(V,1)
     for jj = 1:size(V,2)
@@ -190,7 +195,7 @@ axis([0,50,0,50]);
 set(gcf,'position',[600,200,1920,1080]);
 %}
 
-save(sprintf("structured_map"),"region","region1","V","polyin","occ_map");
+save(sprintf("structured_map"),"region","region1","polyin","occ_map");
 
 function flag = isInside(obstacle,state)
 flag = 0;

@@ -236,9 +236,9 @@ classdef RobotClass
         function flag = inFOV_red(this,map,z,tar_pos,id)
             tmp = tar_pos(1:2,:) - z(1:2);
             ran = vecnorm(tmp);
-            flag1 = ran < this.rmax-0.5;
-            flag2 = ran > this.rmin+0.2;
-            flag3 = (tmp(1,:)*cos(z(3))+tmp(2,:)*sin(z(3)))./ran > cos((this.theta0-10/180*pi)/2);
+            flag1 = ran < this.rmax-2;
+            flag2 = ran > this.rmin+1;
+            flag3 = (tmp(1,:)*cos(z(3))+tmp(2,:)*sin(z(3)))./ran > cos((this.theta0-20/180*pi)/2);
             flag = flag1.*flag2.*flag3;
 
             if id
@@ -413,7 +413,7 @@ classdef RobotClass
                     w(jj) = 0;
                     continue
                 end
-                if this.map.region(ceil(particles(1,jj)),ceil(particles(2,jj))) < 0.45
+                if this.map.region_exp(ceil(particles(1,jj)*5),ceil(particles(2,jj)*5)) < 0.45
                     w(jj) = 10^-20;
                     continue
                 end
@@ -454,12 +454,13 @@ classdef RobotClass
             w = w./sum(w);%归一化的粒子权重
             % resampling
             %
+            N = this.N;
             ess = 1/sum(w.^2);
             flag = 1;
             if flag == 0||flag == 1%&&ess > 0.5*N)
                 M = 1/N;
                 U = rand(1)*M;
-                new_particles = zeros(3,N);
+                new_particles = zeros(2,N);
                 tmp_w = w(1);
                 i = 1;
                 jj = 1;
@@ -481,7 +482,7 @@ classdef RobotClass
         end
 
         %% planning
-        function [this,optz] = Planner(this,fld,sim,plan_mode,ps,pt,tt,ii)
+        function [this,optz] = Planner_HPFT(this,fld,sim,plan_mode,ps,pt,tt,ii)
 
             is_tracking = this.is_tracking;
 
@@ -538,13 +539,15 @@ classdef RobotClass
                 planlen = 50;
             end
 
-            %{
+            %
             B = this.particles;
             w = this.w;
             %}
             %
-            B = this.loc_par;
-            w = this.loc_w;
+            if ~this.is_tracking
+                B = this.loc_par;
+                w = this.loc_w;
+            end
             %}
 
             ran = vecnorm(this.vir_tar(1:2)-this.state(1:2));
@@ -594,46 +597,28 @@ classdef RobotClass
                 this.planned_traj = [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2];
                 this.a_hist = id;
 
-                %% planning horizon 2
-                if ~isempty(tree(opt).children)
-                    opt = tree(opt).children(1);
+                %% planning horizon
+                for hor = 1:2
                     if ~isempty(tree(opt).children)
-                        val = zeros(length(tree(opt).children),1);
-                        for jj = 1:length(tree(opt).children)
-                            val(jj) = tree(tree(opt).children(jj)).Q;
+                        opt = tree(opt).children(1);
+                        if ~isempty(tree(opt).children)
+                            val = zeros(length(tree(opt).children),1);
+                            for jj = 1:length(tree(opt).children)
+                                val(jj) = tree(tree(opt).children(jj)).Q;
+                            end
+                            z = tree(opt).state;
+                            [~,maxid] = max(val);
+                            opt = tree(opt).children(maxid);
+                            id = tree(opt).a_num;
+                            if is_tracking
+                                p = pt{id};
+                            else
+                                p = ps{id};
+                            end
+                            this.planned_traj = [this.planned_traj [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2]];
                         end
-                        z = tree(opt).state;
-                        [~,maxid] = max(val);
-                        opt = tree(opt).children(maxid);
-                        id = tree(opt).a_num;
-                        if is_tracking
-                            p = pt{id};
-                        else
-                            p = ps{id};
-                        end
-                        this.planned_traj = [this.planned_traj [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2]];
                     end
                 end
-
-                 %% planning horizon 3
-%                 if ~isempty(tree_tmp(opt).children)
-%                     val = zeros(length(tree_tmp(opt).children),1);
-%                     for jj = 1:length(tree_tmp(opt).children)
-%                         val(jj) = tree_tmp(tree_tmp(opt).children(jj)).Q;
-%                     end
-%                     z = tree_tmp(opt).state;
-%                     %z = this.planned_traj(:,end);
-%                     [~,maxid] = max(val);
-%                     opt = tree_tmp(opt).children(maxid);
-%                     id = tree_tmp(opt).a_num;
-%                     if is_tracking
-%                         p = pt{id};
-%                     else
-%                         p = ps{id};
-%                     end
-%                     this.planned_traj = [this.planned_traj [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2]];
-%                 end
-                %}
             end
             this.value_max = value_max;
 
@@ -703,7 +688,7 @@ classdef RobotClass
     
                     wrong = 0;
                     for jj = 1:21
-                        if any([1;1] >= tmp(1:2,jj))||any([49;49] <= tmp(1:2,jj))||this.map.region(ceil(tmp(1,jj)),ceil(tmp(2,jj))) < 0.45
+                        if any([1;1] >= tmp(1:2,jj))||any([49;49] <= tmp(1:2,jj))||this.map.region_exp(ceil(tmp(1,jj)*5),ceil(tmp(2,jj)*5)) < 0.45
                             wrong = 1;
                             break
                         end
@@ -711,7 +696,6 @@ classdef RobotClass
     
                     if ~this.is_tracking
                         if wrong
-                            %if any([0;0] >= tree_tmp(num_a).state(1:2))||any([50;50] <= tree_tmp(num_a).state(1:2))||any([0;0] >= tree_tmp(num_a).inter_state(1:2))||any([50;50] <= tree_tmp(num_a).inter_state(1:2))||fld.map.region_exp(ceil(tree_tmp(num_a).state(1)),ceil(tree_tmp(num_a).state(2))) == 0||fld.map.region_exp(ceil(tree_tmp(num_a).inter_state(1)),ceil(tree_tmp(num_a).inter_state(2))) == 0
                             tree_tmp(num_a).N = tree_tmp(num_a).N+1;
                             %%%% need to be modified
                             tree_tmp(num_a).Q = -5;
@@ -755,7 +739,7 @@ classdef RobotClass
 
                 %
                 for jj = 1:size(B,2)
-                    if any([1;1] > B(1:2,jj))||any([49;49] < B(1:2,jj))||this.map.region_exp(ceil(B(1,jj)),ceil(B(2,jj))) < 0.45
+                    if any([1;1] > B(1:2,jj))||any([49;49] < B(1:2,jj))||this.map.region_exp(ceil(B(1,jj)*5),ceil(B(2,jj)*5)) < 0.45
                         w(jj) = 0;
                     end
                 end
@@ -764,7 +748,7 @@ classdef RobotClass
 
                 M = 1/N;
                 U = rand(1)*M;
-                new_particles = zeros(3,N);
+                new_particles = zeros(2,N);
                 tmp_w = w(1);
                 i = 1;
                 jj = 1;
@@ -784,7 +768,7 @@ classdef RobotClass
 
                 state = tree_tmp(num_a).state;
                 if this.is_tracking
-                    reward = this.MI(fld,sim,tree_tmp(num_a).state,B,w) + this.MI(fld,sim,tree_tmp(num_a).inter_state,B,w);
+                    reward = this.MI(fld,sim,tree_tmp(num_a).state,B,w);% + this.MI(fld,sim,tree_tmp(num_a).inter_state,B,w);
                 else
                     reward = this.MI(fld,sim,tree_tmp(num_a).state,B,w);
                 end
@@ -866,91 +850,98 @@ classdef RobotClass
                 end
                 if flag == 1
                     node = tree_tmp(begin);
-                    %{
+                    if this.is_tracking
+                        %
                         simIndex = simIndex + 1;
                         rollout = this.rollOut(fld,sim,node,eta,depth-1,B,w,simIndex,tt,pt,ps,flg);
-                    %}
-                    %
-                    if isempty(this.allstate)
-                        simIndex = simIndex + 1;
-                        rollout = this.rollOut(fld,sim,node,eta,depth-1,B,w,simIndex,tt,pt,ps,flg);
-                        this.allstate = [this.allstate [node.state(1:3);begin]];
-                        tree_tmp(begin).r = rollout;
-                    else
-                        [Idx,D] = knnsearch(this.allstate(1:2,:)',node.state(1:2)');
-                        %{
-                        % for debug only
-                        if begin == this.allstate(4,Idx)
-                            1
-                        end
                         %}
-                        if D < 1 && norm(this.allstate(3,Idx)-node.state(3)) < pi %&& begin ~= this.allstate(4,Idx)
-                            rollout = tree_tmp(this.allstate(4,Idx)).r;
-                            tree_tmp(begin).r = rollout;
-                        else
+                    else
+                        %{
+                        simIndex = simIndex + 1;
+                        rollout = this.rollOut(fld,sim,node,eta,depth-1,B,w,simIndex,tt,pt,ps,flg);
+                        %}
+                        %
+                        if isempty(this.allstate)
                             simIndex = simIndex + 1;
                             rollout = this.rollOut(fld,sim,node,eta,depth-1,B,w,simIndex,tt,pt,ps,flg);
                             this.allstate = [this.allstate [node.state(1:3);begin]];
                             tree_tmp(begin).r = rollout;
+                        else
+                            [Idx,D] = knnsearch(this.allstate(1:2,:)',node.state(1:2)');
+                            %{
+                        % for debug only
+                        if begin == this.allstate(4,Idx)
+                            1
+                        end
+                            %}
+                            if D < 1 && norm(this.allstate(3,Idx)-node.state(3)) < pi %&& begin ~= this.allstate(4,Idx)
+                                rollout = tree_tmp(this.allstate(4,Idx)).r;
+                                tree_tmp(begin).r = rollout;
+                            else
+                                simIndex = simIndex + 1;
+                                rollout = this.rollOut(fld,sim,node,eta,depth-1,B,w,simIndex,tt,pt,ps,flg);
+                                this.allstate = [this.allstate [node.state(1:3);begin]];
+                                tree_tmp(begin).r = rollout;
 
-                            % rollout reuse
-                            %
-                            % tic
-                            T = size(tree_tmp(begin).hist,2);
-                            for ii = 2:length(tree_tmp)
-                                if tree_tmp(ii).a_num == 0 && size(tree_tmp(ii).hist,2)+1 == T 
-                                    kk = 1;
-                                    for jj = 1:size(tree_tmp(ii).a,2)
-                                        action = tree_tmp(ii).a(:,kk);
-                                        id = action(5);
-                                        if this.is_tracking
-                                            p = pt{id};
-                                        else
-                                            p = ps{id};
-                                        end
+                                % rollout reuse
+                                %
+                                % tic
+                                T = size(tree_tmp(begin).hist,2);
+                                for ii = 2:length(tree_tmp)
+                                    if tree_tmp(ii).a_num == 0 && size(tree_tmp(ii).hist,2)+1 == T
+                                        kk = 1;
+                                        for jj = 1:size(tree_tmp(ii).a,2)
+                                            action = tree_tmp(ii).a(:,kk);
+                                            id = action(5);
+                                            if this.is_tracking
+                                                p = pt{id};
+                                            else
+                                                p = ps{id};
+                                            end
 
-                                        z = tree_tmp(ii).state(1:3);
-                                        tmp = [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'];
+                                            z = tree_tmp(ii).state(1:3);
+                                            tmp = [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'];
 
-                                        wrong = 0;
-                                        for ll = 1:21
-                                            if mod(ll-1,5)==0
-                                                if any([1;1] >= tmp(1:2,ll))||any([49;49] <= tmp(1:2,ll))||this.map.region_exp(ceil(tmp(1,ll)),ceil(tmp(2,ll))) < 0.45
-                                                    wrong = 1;
-                                                    break
+                                            wrong = 0;
+                                            for ll = 1:21
+                                                if mod(ll-1,5)==0
+                                                    if any([1;1] >= tmp(1:2,ll))||any([49;49] <= tmp(1:2,ll))||this.map.region_exp(ceil(tmp(1,ll)*5),ceil(tmp(2,ll)*5)) < 0.45
+                                                        wrong = 1;
+                                                        break
+                                                    end
                                                 end
                                             end
-                                        end
 
-                                        if wrong
-                                            %{
+                                            if wrong
+                                                %{
                                             tree_tmp(ii).a(:,kk) = [];
                                             kk = kk - 1;
                                             tree_tmp = backup(this,tree_tmp,ii,-5,eta);
-                                            %}
-                                        else
-                                            if norm(this.allstate(1:2,end)-tmp(1:2,end)) < 0.5 && norm(this.allstate(3,end)-tmp(3,end)) < pi 
-                                                % expand with rollout reward
-                                                state = tmp(:,end);
-                                                state = [state;action(4)];
-                                                num = num + 1;
-                                                [this,tree_tmp,num] = this.expand_spec(sim,ii,num,tree_tmp,state,action,a);
+                                                %}
+                                            else
+                                                if norm(this.allstate(1:2,end)-tmp(1:2,end)) < 0.5 && norm(this.allstate(3,end)-tmp(3,end)) < pi
+                                                    % expand with rollout reward
+                                                    state = tmp(:,end);
+                                                    state = [state;action(4)];
+                                                    num = num + 1;
+                                                    [this,tree_tmp,num] = this.expand_spec(sim,ii,num,tree_tmp,state,action,a);
 
-                                                % backup
-                                                r = eta*rollout + this.MI(fld,sim,state,B_pre,w); % + dist
-                                                tree_tmp = backup(this,tree_tmp,num,r,eta);
+                                                    % backup
+                                                    r = eta*rollout + this.MI(fld,sim,state,B_pre,w); % + dist
+                                                    tree_tmp = backup(this,tree_tmp,num,r,eta);
 
-                                                tree_tmp(ii).a(:,kk) = [];
-                                                kk = kk - 1;
+                                                    tree_tmp(ii).a(:,kk) = [];
+                                                    kk = kk - 1;
+                                                end
                                             end
-                                        end
 
-                                        kk = kk + 1;
+                                            kk = kk + 1;
+                                        end
                                     end
                                 end
+                                %
+                                % toc
                             end
-                            %
-                            % toc
                         end
                     end
                     %}
@@ -1222,7 +1213,7 @@ classdef RobotClass
                 flag = flag1.*flag2;
                 B_tmp1(1,:) = B_tmp1(1,:).*flag;
                 B_tmp1(2,:) = B_tmp1(2,:).*flag;
-                B_tmp1(3,:) = B_tmp1(3,:).*flag;
+                %B_tmp1(3,:) = B_tmp1(3,:).*flag;
                 B_tmp1(:,any(B_tmp1,1)==0)=[];
 
                 if isempty(B_tmp1)
@@ -1230,7 +1221,7 @@ classdef RobotClass
                     return
                 end
 
-                B_tmp2 = zeros(3,N);
+                B_tmp2 = zeros(2,N);
                 B_tmp2(:,1:size(B_tmp1,2)) = B_tmp1;
                 for jj = size(B_tmp1,2)+1:N
                     B_tmp2(:,jj) = B_tmp1(:,randperm(size(B_tmp1,2),1));
@@ -1259,7 +1250,7 @@ classdef RobotClass
                         state(2) = node.state(2)-action(1)*cos(node.state(3))+action(2)*sin(node.state(3));
                         state(3) = node.state(3)+action(3);
                         state(4) = action(4);
-                        if any([0;0] >= state(1:2))||any([50;50] <= state(1:2))||this.map.region_exp(ceil(state(1)),ceil(state(2))) < 0.45||fld.map.V(ceil(node.state(1)),ceil(node.state(2)),ceil(state(1)),ceil(state(2))) == 0||state(4)<0%||state(4)>5
+                        if any([0;0] >= state(1:2))||any([50;50] <= state(1:2))||this.map.region_exp(ceil(state(1)*5),ceil(state(2)*5)) < 0.45||fld.map.V(ceil(node.state(1)),ceil(node.state(2)),ceil(state(1)),ceil(state(2))) == 0||state(4)<0%||state(4)>5
                             reward = 0;
                             node.a(:,id) = [];
                         else
@@ -1270,7 +1261,11 @@ classdef RobotClass
                 else
                     action_opt = [];
                     target = [B(1,:)*w';B(2,:)*w'];
-                    target = this.vir_tar;
+
+                    %
+                    if ~this.is_tracking
+                        target = this.vir_tar;
+                    end
                     mindis = 100000;
                     max_rew = -100000;
                     for jj = 1:size(node.a,2)
@@ -1303,7 +1298,7 @@ classdef RobotClass
                         wrong = 0;
                         for kk = 1:21
                             if mod(kk-1,5)==0
-                                if any([1;1] >= tmp(1:2,kk))||any([49;49] <= tmp(1:2,kk))||this.map.region_exp(ceil(tmp(1,kk)),ceil(tmp(2,kk))) < 0.45
+                                if any([1;1] >= tmp(1:2,kk))||any([49;49] <= tmp(1:2,kk))||this.map.region_exp(ceil(tmp(1,kk)*5),ceil(tmp(2,kk)*5)) < 0.45
                                     wrong = 1;
                                     break
                                 end
@@ -1361,6 +1356,11 @@ classdef RobotClass
                         reward = MI(this,fld,sim,node.state,B,w);
 
                         reward = 3*exp(-norm(node.state(1:2)-target));
+                        %{
+                        if ~this.is_tracking
+                            reward = 3*exp(-norm(node.state(1:2)-target));
+                        end
+                        %}
                         %}
                         %reward = MI(this,fld,sim,node.state,B,w) + exp(-norm(node.state(1:2)-target));
 
@@ -1385,11 +1385,7 @@ classdef RobotClass
                     clf
                 end
                 %}
-                %{
-                if reward>0.1 &&~this.is_tracking
-                    return
-                end
-                %}
+ 
                 reward = reward + eta*this.rollOut(fld,sim,node,eta,depth-1,B,w,simIndex+1,tt,pt,ps,flg);
             end
         end
@@ -1398,7 +1394,7 @@ classdef RobotClass
         
         function reward = MI(this,fld,sim,state,particles,w)
             %
-            if any([0;0] >= state(1:2))||any([50;50] <= state(1:2))||this.map.region_exp(ceil(state(1)),ceil(state(2))) < 0.45
+            if any([0;0] >= state(1:2))||any([50;50] <= state(1:2))||this.map.region_exp(ceil(state(1)*5),ceil(state(2)*5)) < 0.45
                 reward = -1000;
                 return
             end
@@ -1444,7 +1440,7 @@ classdef RobotClass
             %N
             particles_tmp = particles;
             w_tmp = w;
-            particles = zeros(3,N);
+            particles = zeros(2,N);
             w = zeros(1,N);
             for mm = 1:size(particles_tmp,2)
                 w(flag(Cidx(mm,1),Cidx(mm,2))) = w(flag(Cidx(mm,1),Cidx(mm,2))) + w_tmp(mm);
@@ -1575,81 +1571,6 @@ classdef RobotClass
                 error('1');
             elseif reward < 1e-10
                 reward = 0;
-            end
-        end
-
-        %% robot state updating
-        function this = updState(this,u)
-            % update robot's actual state using control input
-            st = this.state;
-
-            if u(1) > this.w_ub
-                fprintf('[main loop] Robot.m, line %d, u(1)=%d> w_ub. Adjusted to upper bound\n',MFileLineNr(),u(1))
-                u(1) = this.w_ub;
-            elseif u(1) < this.w_lb
-                fprintf('[main loop] Robot.m, line %d, u(1)=%d< w_lb. Adjusted to lower bound\n',MFileLineNr(),u(1))
-                u(1) = this.w_lb;
-            end
-
-            if u(2) > this.a_ub
-                fprintf('[main loop] Robot.m, line %d, u(2)=%d> a_ub. Adjusted to upper bound\n',MFileLineNr(),u(2))
-                u(2) = this.a_ub;
-            elseif u(2) < this.a_lb
-                fprintf('[main loop] Robot.m, line %d, u(2)=%d< a_lb. Adjusted to upper bound\n',MFileLineNr(),u(2))
-                u(2) = this.a_lb;
-            end
-
-            this.optu = [this.optu,u(:,1)];
-            dt = this.dt;
-            this.state = st+[st(4)*cos(st(3));st(4)*sin(st(3));u(:,1)]*dt;
-            % (10/9) added noise in motion model
-            new_state = mvnrnd(this.state',this.Qr)';
-            this.state = new_state;
-
-            if this.state(4) > this.v_ub
-                fprintf('[main loop] Robot.m, line %d, z(4)=%d> v_ub. Adjusted to upper bound\n',MFileLineNr(),this.state(4))
-                this.state(4) = this.v_ub;
-            elseif this.state(4) < this.v_lb
-                fprintf('[main loop] Robot.m, line %d, z(4)=%d< v_lb. Adjusted to upper bound\n',MFileLineNr(),this.state(4))
-                this.state(4) = this.v_lb;
-            end
-
-            if this.state(1) > 50
-                fprintf('[main loop] Robot.m, line %d, z(1)=%d> 50. Adjusted to upper bound\n',MFileLineNr(),this.state(1))
-                this.state(1) = 50;
-            elseif this.state(1) < 0
-                fprintf('[main loop] Robot.m, line %d, z(1)=%d< 0. Adjusted to upper bound\n',MFileLineNr(),this.state(1))
-                this.state(1) = 0;
-            end
-
-            if this.state(2) > 50
-                fprintf('[main loop] Robot.m, line %d, z(1)=%d> 50. Adjusted to upper bound\n',MFileLineNr(),this.state(2))
-                this.state(2) = 50;
-            elseif this.state(2) < 0
-                fprintf('[main loop] Robot.m, line %d, z(1)=%d< 0. Adjusted to upper bound\n',MFileLineNr(),this.state(2))
-                this.state(2) = 0;
-            end
-
-            %%%%% there should be psd checker for P. May fill this part
-            %%%%% later
-
-            this.traj = [this.traj,this.state];
-        end
-
-        function z = simState(this,u,z0)
-            % used in optimizer for simulating state given input u
-            if nargin > 2
-                st = z0;
-            else
-                st = this.state;
-            end
-
-            dt = this.dt;
-            len = size(u,2);
-            z = zeros(length(st),len+1);
-            z(:,1) = st;
-            for ii = 1:len
-                z(:,ii+1) = z(:,ii)+[z(4,ii)*cos(z(3,ii));z(4,ii)*sin(z(3,ii));u(:,ii)]*dt;
             end
         end
 

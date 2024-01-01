@@ -21,8 +21,9 @@ runtime = zeros(50,1);
 
 %rng(0)
 
-for tt = [2 3 5 6 8 10] %1:50 %44 %47
-%for tt = 2
+%for tt = [2 3 5 6 8 10] %1:50 %44 %47
+%for tt = 1:10
+for tt = 2
 
 % set up parameters
 simSetup;
@@ -53,61 +54,15 @@ for ii = 1:sim_len
     %fprintf('[main loop] gameSim.m, line %d, iteration %d, Progress: %d\n',MFileLineNr(),ii,ii/sim_len)
 
     %% target moves
-    %fld = fld.targetMove(tt,ii);
-    %{
-    if ~rbt.is_tracking
-        pos_tmp = fld.target.pos(1:2) -1 + 1.8*[rand;rand];
-        %flag = any([1;1] >= pos_tmp(1:2))||any([49;49] <= pos_tmp(1:2))||~fld.map.region(ceil(pos_tmp(1)),ceil(pos_tmp(2)));
-        while(any([1;1] >= pos_tmp(1:2))||any([49;49] <= pos_tmp(1:2))||~fld.map.region(ceil(pos_tmp(1)),ceil(pos_tmp(2))))
-            pos_tmp = fld.target.pos(1:2) + [rand;rand];
-        end
-    else 
-        pos_tmp = fld.target.pos(1:2) + 0.2*(fld.target.pos(1:2)-rbt.state(1:2)) + [rand;rand];
-        %flag = any([1;1] >= pos_tmp(1:2))||any([49;49] <= pos_tmp(1:2))||~fld.map.region(ceil(pos_tmp(1)),ceil(pos_tmp(2)));
-        while(any([1;1] >= pos_tmp(1:2))||any([49;49] <= pos_tmp(1:2))||~fld.map.region(ceil(pos_tmp(1)),ceil(pos_tmp(2))))
-            pos_tmp = fld.target.pos(1:2) + [rand;rand];
-        end
-    end
-    %}
+    fld = fld.targetMove(tt,ii);
 
-    %{
-    pos_tmp = fld.target.pos(1:2) -3 + 6*[rand;rand];
-    %flag = any([1;1] >= pos_tmp(1:2))||any([49;49] <= pos_tmp(1:2))||~fld.map.region(ceil(pos_tmp(1)),ceil(pos_tmp(2)));
-    while(any([1;1] >= pos_tmp(1:2))||any([49;49] <= pos_tmp(1:2))||~fld.map.region(ceil(pos_tmp(1)),ceil(pos_tmp(2))))
-        pos_tmp = fld.target.pos(1:2) + [rand;rand];
-    end
-    fld.target.pos(1:2) = pos_tmp;
-    %}
-    Q_tmp = [0.001 0;0 0.001];
-    if ii <= 10
-        move = mvnrnd([-0.5;0]',Q_tmp)';
-    elseif ii <= 20
-        move = mvnrnd([0;-0.5]',Q_tmp)';
-    elseif ii <= 30
-        move = mvnrnd([0.5;0]',Q_tmp)';
-    elseif ii <= 67
-        move = mvnrnd([0;-0.5]',Q_tmp)';
-    elseif ii <= 79
-        move = mvnrnd([-0.5;0]',Q_tmp)';
-    elseif ii <= 119
-        move = mvnrnd([0;-0.5]',Q_tmp)';
-    elseif ii <= 150
-        move = mvnrnd([-0.5;0]',Q_tmp)';
-    elseif ii <= 170
-        move = mvnrnd([0;0.5]',Q_tmp)';
-    else
-        move = mvnrnd([-0.4;0]',Q_tmp)';
-    end
-
-    move = 0;
-    fld.target.pos(1:2) = fld.target.pos(1:2) + move;
 
     fld.target.traj = [fld.target.traj;fld.target.pos'];
 
     %% target position estimation
     rbt.y = rbt.sensorGen(fld);
 
-    lidarnum = 30;
+    lidarnum = 60;
     ranges = zeros(lidarnum,1);
     angles = linspace(-pi/4,pi/4,lidarnum);
     maxrange = rbt.rmax;
@@ -130,24 +85,42 @@ for ii = 1:sim_len
 
     scan = lidarScan(ranges,angles);
 
+    for jj = 1:5
     insertRay(rbt.map.occ_map,rbt.state(1:3)',scan,maxrange);
+    end
+
+    %show(rbt.map.occ_map)
 
     rbt.map.region = occupancyMatrix(rbt.map.occ_map);
 
     region_tmp = rbt.map.region';
-    region1 = zeros(50,50);
+    region1 = zeros(250,250);
 
     for jj = 1:size(region_tmp,2)
         region1(:,jj) = region_tmp(:,size(region_tmp,2)-jj+1);
     end
     rbt.map.region = 1-region1;
-    rbt.map.region_exp = rbt.map.region;
+
+    % map inflation
+    map_tmp = copy(rbt.map.occ_map);
+    inflate(map_tmp,0.5);
+
+    rbt.map.region_exp = occupancyMatrix(map_tmp);
+
+    region_tmp = rbt.map.region_exp';
+    region1 = zeros(250,250);
+
+    for jj = 1:size(region_tmp,2)
+        region1(:,jj) = region_tmp(:,size(region_tmp,2)-jj+1);
+    end
+    rbt.map.region_exp = 1-region1;
 
     rbt.is_tracking = 0;
     %rbt.inFOV(rbt.state,fld.target.pos)
     %if rbt.inFOV(rbt.state,fld.target.pos)&&fld.map.V(ceil(rbt.state(1)),ceil(rbt.state(2)),ceil(fld.target.pos(1)),ceil(fld.target.pos(2)))
     if rbt.y(1) ~= -100
         rbt.is_tracking = 1;
+        rbt.N = 50;
     end
 
     %% particle filtering
@@ -180,7 +153,7 @@ for ii = 1:sim_len
 
     particles_tmp = particles;
     w_tmp = w;
-    particles = zeros(3,N);
+    particles = zeros(2,N);
     w = zeros(1,N);
     for mm = 1:size(particles_tmp,2)
         id = flag(Cidx(mm,1),Cidx(mm,2));
@@ -331,7 +304,7 @@ for ii = 1:sim_len
     if ii > 1
         wrong = 0;
         for jj = 0:20
-            if ~fld.map.region(ceil(rbt.traj(1,end-jj)),ceil(rbt.traj(2,end-jj)))
+            if ~fld.map.region(ceil(rbt.traj(1,end-jj)*5),ceil(rbt.traj(2,end-jj)*5))
                 wrong = 1;
                 break
             end
@@ -350,13 +323,13 @@ for ii = 1:sim_len
     tic
 
     if strcmp(plan_mode,'NBV')
-        % (TODO: changliu) legacy code. will clean up later.
-        %         [optz,optu] = rbt.cvxPlanner_kf(fld,optz,optu);
-        %         [optz,optu,s,snum,merit, model_merit, new_merit] = rbt.cvxPlanner_scp(fld,optz,optu,plan_mode);
+        [rbt,optz] = rbt.Planner_NBV(fld,sim,plan_mode,ps,pt,tt,ii);
     elseif strcmp(plan_mode,'sampling')
-        %[optz,optu,s,snum,merit, model_merit, new_merit] = rbt.cvxPlanner_scp(fld,optz,optu,plan_mode);
+        [rbt,optz] = rbt.Planner_sampling(fld,sim,plan_mode,ps,pt,tt,ii);
+    elseif strcmp(plan_mode,'PFT')
+        [rbt,optz] = rbt.Planner_PFT(fld,sim,plan_mode,ps,pt,tt,ii);
     elseif strcmp(plan_mode,'ASPIRe')
-        [rbt,optz] = rbt.Planner(fld,sim,plan_mode,ps,pt,tt,ii);
+        [rbt,optz] = rbt.Planner_HPFT(fld,sim,plan_mode,ps,pt,tt,ii);
     end
 
     t = toc
@@ -371,16 +344,88 @@ for ii = 1:sim_len
 
     rbt.state = optz;
 
-% save the plot as a video
+    % save the plot as a video
     frame = getframe(gcf);
     if save_video
         writeVideo(vidObj,frame);
     end   
 
+    %{
+    if ii == sim_len
+        figure
+        hold on
+        axis([0,50,0,50]);
+
+        %%%%%%
+        map_tmp = copy(rbt.map.occ_map);
+        inflate(map_tmp,0.5);
+        show(map_tmp)
+
+        plot(rbt.particles(1,:),rbt.particles(2,:),'.','Color',[0 1 0.5]);
+        plot(rbt.loc_par(1,:),rbt.loc_par(2,:),'.','Color',[0.9290 0.6940 0.1250]);
+        plot(rbt.est_pos(1),rbt.est_pos(2),"^",'Color','r','MarkerFaceColor','r',MarkerSize=15);
+
+        if ~rbt.is_tracking
+            for jj = 1:size(rbt.first_particles,2)
+                plot(rbt.first_particles(1,jj),rbt.first_particles(2,jj),'.m',MarkerSize=ceil(100*rbt.first_w(jj)));
+            end
+        end
+
+        colorbar; % 设置颜色映射
+        cmap = colormap("jet"); % 创建颜色条
+
+        %plot(fld.target.traj(1:ii+1,1),fld.target.traj(1:ii+1,2),'-','Color',[0.13333 0.5451 0.13333],LineWidth=3);
+        for jj = 1:200-1
+            color = interp1(linspace(1, 200, size(cmap, 1)), cmap, jj);
+            plot(fld.target.traj(jj:jj+1,1),fld.target.traj(jj:jj+1,2), 'Color', color, 'LineWidth', 2,'LineStyle','--');
+        end
+        %plot(rbt.traj(1,1:end-1),rbt.traj(2,1:end-1),'-','Color','r',MarkerSize=0.1,LineWidth=3);
+
+        % Plot the trajectory with gradient color
+        len = size(rbt.traj,2)/21;
+        for kk = 1:len
+            color = interp1(linspace(1, 200, size(cmap, 1)), cmap, kk);
+            if kk == len
+                for jj = (kk-1)*21+1:kk*21-1
+                    plot(rbt.traj(1,jj:jj+1),rbt.traj(2,jj:jj+1), 'Color', color, 'LineWidth', 3);
+                end
+            else
+                for jj = (kk-1)*21+1:kk*21
+                    plot(rbt.traj(1,jj:jj+1),rbt.traj(2,jj:jj+1), 'Color', color, 'LineWidth', 3);
+                end
+            end
+        end
+
+        if ~isempty(rbt.planned_traj)
+            plot(rbt.planned_traj(1,1:end),rbt.planned_traj(2,1:end),'-','Color','g',MarkerSize=0.1,LineWidth=3);
+        end
+    
+        plot(fld.target.traj(ii+1,1),fld.target.traj(ii+1,2),"pentagram",'Color',[0.13333 0.5451 0.13333],'MarkerFaceColor',[0.13333 0.5451 0.13333],MarkerSize=15);
+        plot(rbt.state(1),rbt.state(2),'ro',MarkerFaceColor='r',MarkerSize=15);
+
+        rbt.drawFOV(rbt.state,fld,'cur',[0.9290 0.6940 0.1250]);
+        rbt.drawFOV_red(rbt.state,fld,'cur',[1 0 1]);
+
+        xticks(0:10:50);
+        xticklabels({'0','10','20','30','40','50'});
+        yticks(0:10:50);
+        yticklabels({'0','10','20','30','40','50'});
+        axis equal;
+        axis([0,50,0,50]);
+
+        drawnow limitrate
+
+        set(gcf,'position',[500,200,1080,720]);
+        f = getframe(gcf);
+        imwrite(f.cdata, strcat('case',num2str(tt),'.png'));
+        pause(5)
+    end
+    %}
+
     clf
 
     % skip tracking
-    %
+    %{
     if rbt.is_tracking
         pause(1);
         clf

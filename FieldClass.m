@@ -33,8 +33,8 @@ classdef FieldClass
             %}
             tar = this.target;
 
-            tar.pos = [tar.traj(tt,ii+1,1);tar.traj(tt,ii+1,2)];
-            % tar.traj = [tar.traj,tar.pos];
+            tar.pos = [tar.targetPose(tt,ii,1);tar.targetPose(tt,ii,2);tar.targetPose(tt,ii,3)];
+            %tar.traj = [tar.traj,tar.pos];
 
             this.target = tar;
         end
