@@ -21,7 +21,7 @@ set(0,'DefaultFigureWindowStyle','normal');
 
 sim_len = 200; % simulation duration
 dt = 1;
-plan_mode = 'ASPIRe'; % choose the mode of simulation: NBV, sampling, ASPIRe
+plan_mode = 'GM-PHD-SAT'; % choose the mode of simulation: NBV, sampling, ASPIRe, GM-PHD-SAT, Cell-MB-SWT
 
 % parameter for target motion model: 
 % 'static', 'lin'(ear), 'cir'(cular), 'sin'(usoidal), 'ped'(estrian)
@@ -85,7 +85,8 @@ switch tar_model
         target.Q = 0.25*eye(2); %0.04 % Covariance of process noise model for the target
         %}
 end
-target.Q_search = [0.05 0;0 0.05];
+target.Q_search = [0.1 0;0 0.1];
+target.Q_search = [1 0;0 1];
 %target.Q_search = [1 0 0;0 1 0;0 0 0.01];
 %target.Q_search = zeros(3);
 target.Q_tracking = [1 0;0 1];
@@ -128,7 +129,7 @@ inPara_rbt.state = [5;8;0;1];
 inPara_rbt.state = [15;5;0;1];
 %inPara_rbt.state = [45;40;pi/2;1];
 inPara_rbt.state = [rbt_state(tt,:)';1];
-%inPara_rbt.state = [15;5;0;1];
+%inPara_rbt.state = [5;22;pi/2;1];
 
 %inPara_rbt.traj = inPara_rbt.state(1:3);
 inPara_rbt.traj = [];
@@ -170,12 +171,14 @@ inPara_rbt.angles = [];
 
 inPara_rbt.inFOV_hist = [];
 inPara_rbt.is_tracking = 0;
+inPara_rbt.first = 1;
+inPara_rbt.pred = 0;
 
 switch sensor_type 
     case 'rb'
         % range-bearing sensor
         inPara_rbt.h = @(x,z) [sqrt(sum((x(1:2,:)-z(1:2)).^2)+0.1);atan2(x(2,:)-z(2),x(1,:)-z(1))-z(3)];
-        inPara_rbt.del_h = @(x,z) [2*x(1) 0; 0 2*x(2)]; % z is the robot state.
+        inPara_rbt.del_h = @(x,z) [(x(1:2)-z(1:2))'/sqrt(sum((x(1:2,:)-z(1:2)).^2)+0.1); [-(x(2)-z(2))/sum((x(1:2,:)-z(1:2)).^2) (x(1)-z(1))/sum((x(1:2,:)-z(1:2)).^2)]]; % z is the robot state.
         inPara_rbt.R = [0.1 0;0 0.01];
         inPara_rbt.mdim = 2;
     case 'ran'
@@ -213,6 +216,7 @@ switch prior_case
         %inPara_rbt.particles = mvnrnd([38;38;0],[50 0 0;0 50 0;0 0 0.005],inPara_rbt.N)';
         %[38;38;0]
         inPara_rbt.particles = mvnrnd(particle_mean(tt,:)',[50 0;0 50],inPara_rbt.N)';
+        %inPara_rbt.particles = mvnrnd([7;25],[50 0;0 50],inPara_rbt.N)';
     case 'multimodal'
         noise1 = zeros(1,3);
         noise1(1) = noise_point(tt,1,1);
@@ -240,6 +244,25 @@ inPara_rbt.hgrid = [[map.size/2;0;0;0] [map.size/2;map.size/2;0;0] [map.size/2;0
 inPara_rbt.vir_tar = [-1;-1];
 
 %     error(ii) = norm(state_estimation(1:2)-tar_pos(1:2));
+inPara_rbt.gmm_num = 3;
+inPara_rbt.gmm_w = ones(1,inPara_rbt.gmm_num)/inPara_rbt.gmm_num;
+inPara_rbt.gmm_mu = [particle_mean(tt,:)' particle_mean(tt,:)' particle_mean(tt,:)'];
+%inPara_rbt.gmm_mu = [[7;25] [7;25] [7;25]];
+P_val = 50;
+inPara_rbt.gmm_P = {[P_val 0; 0 P_val];[P_val 0; 0 P_val];[P_val 0; 0 P_val]};
+
+inPara_rbt.cell_size = 1; 
+cell_size = inPara_rbt.cell_size;
+mass = 0;
+inPara_rbt.cell = zeros(50/cell_size,50/cell_size);
+for ii = 1:50/cell_size
+    for jj = 1:50/cell_size
+        inPara_rbt.cell(ii,jj) = mvnpdf([ii-1 jj-1], particle_mean(tt,:), [50 0;0 50]);
+        mass = mass + inPara_rbt.cell(ii,jj)*cell_size^2;
+    end
+end
+inPara_rbt.cell = inPara_rbt.cell/mass;
+
 inPara_rbt.P = {[100 0; 0 100];[100 0; 0 100];[100 0; 0 100]};
 
 inPara_rbt.tree = [];
@@ -289,7 +312,24 @@ inPara_rbt.int_pts_S = interpolated_points;
 a = zeros(5,19); % action space
 interpolated_points = zeros(19,2,3);
 pt = {};
+%{
+inputs =[12 pi/16;
+    6 pi/16;
+    12 pi/8;
+    6 pi/8;
+    12 -pi/16;
+    6 -pi/16;
+    12 -pi/8;
+    6 -pi/8;
+    12 0;
+    6 0;
+    0 pi/16;
+    0 pi/4;
+    0 -pi/16;
+    0 -pi/4];
+%}
 
+%
 inputs =[15 pi/16;
     10 pi/16;
     5 pi/16;
@@ -306,50 +346,11 @@ inputs =[15 pi/16;
     10 0;
     5 0;
     0 pi/16;
-    0 pi/8;
+    0 pi/4;
     0 -pi/16;
-    0 -pi/8];
+    0 -pi/4];
+%}
 
-% inputs =[20 pi/6;
-%     10 pi/16;
-%     5 pi/16;
-%     20 pi/4;
-%     10 pi/8;
-%     5 pi/8;
-%     20 -pi/6;
-%     10 -pi/16;
-%     5 -pi/16;
-%     20 -pi/4;
-%     10 -pi/8;
-%     5 -pi/8;
-%     20 0;
-%     10 0;
-%     5 0;
-%     0 pi/16;
-%     0 pi/8;
-%     0 -pi/16;
-%     0 -pi/8];
-
-
-% inputs =[15 pi/16;
-%     10 pi/16;
-%     15 pi/8;
-%     10 pi/8;
-%     15 3*pi/16;
-%     10 3*pi/16;
-%     15 -pi/16;
-%     10 -pi/16;
-%     15 -pi/8;
-%     10 -pi/8;
-%     15 -3*pi/16;
-%     10 -3*pi/16;
-%     15 0;
-%     10 0;
-%     5 0;
-%     0 pi/16;
-%     0 pi/8;
-%     0 -pi/16;
-%     0 -pi/8];
 
 for ii = 1:size(a,2)
 [~,pt{ii}] = ode45(@(t,y)derivative(kinematicModel,y,inputs(ii,:)),tspan,initialState);

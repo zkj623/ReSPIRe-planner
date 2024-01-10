@@ -77,21 +77,6 @@ region_tmp1 = occupancyMatrix(occ_map);
 % 
 % show(map)
 
-%{
-expand_rad = 0.3;
-er = expand_rad;
-polyin(1).points = [7-er,7-er,10+er,10+er;5-er,35+er,35+er,5-er];
-polyin(2).points = [14-er,14-er,21+er,21+er;18-er,25+er,25+er,18-er];
-polyin(3).points = [33-er,33-er,41+er,41+er;38-er,46+er,46+er,38-er];
-polyin(4).points = [17-er,17-er,33+er,33+er;7-er,10+er,10+er,7-er];
-polyin(5).points = [5-er,5-er,25+er,25+er;42-er,45+er,45+er,42-er];
-polyin(6).points = [40,24.5,27,42.5;17.5,33,35.5,20];
-polyin(7).points = [16-er,16-er,20+er,20+er;33-er,37+er,37+er,33-er];
-polyin(8).points = [40-er,40-er,45+er,45+er;7-er,12+er,12+er,7-er];
-polyin(9).points = [26-er,26-er,31+er,31+er;15-er,20+er,20+er,15-er];
-polyin(10).points = [40,38.7,45,46.3;27.7,29,35.3,34];
-%}
-
 X = {};
 Y = {};
 for ii = 1:num_obstacle

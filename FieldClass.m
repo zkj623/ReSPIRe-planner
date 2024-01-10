@@ -25,7 +25,8 @@ classdef FieldClass
             f = tar.f;
             Q = tar.Q; % covariance matrix of process noise
 
-            %                 tar.state = mvnrnd(f(tar.state),Q)';
+            %                 
+            tar.state = mvnrnd(f(tar.state),Q)';
             tar.pos = mvnrnd(f(tar.pos),Q)';
             tar.traj = [tar.traj,tar.pos];
 
