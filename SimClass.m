@@ -182,14 +182,16 @@ classdef SimClass
                 %}
             else
                 plot(rbt.particles(1,:),rbt.particles(2,:),'.','Color',[0 1 0.5]);
-                plot(rbt.loc_par(1,:),rbt.loc_par(2,:),'.','Color',[0.9290 0.6940 0.1250]);
-                plot(rbt.est_pos(1),rbt.est_pos(2),"^",'Color','r','MarkerFaceColor','r',MarkerSize=15);
 
-                if rbt.first
-                    for jj = 1:size(rbt.first_particles,2)
-                        plot(rbt.first_particles(1,jj),rbt.first_particles(2,jj),'.m',MarkerSize=ceil(100*rbt.first_w(jj)));
+                if strcmp(plan_mode,'ASPIRe')
+                    plot(rbt.loc_par(1,:),rbt.loc_par(2,:),'.','Color',[0.9290 0.6940 0.1250]);
+                    if rbt.first
+                        for jj = 1:size(rbt.first_particles,2)
+                            plot(rbt.first_particles(1,jj),rbt.first_particles(2,jj),'.m',MarkerSize=ceil(100*rbt.first_w(jj)));
+                        end
                     end
                 end
+                plot(rbt.est_pos(1),rbt.est_pos(2),"^",'Color','r','MarkerFaceColor','r',MarkerSize=15);
             end
 
             plot(rbt.traj(1,1:end-1),rbt.traj(2,1:end-1),'-','Color','r',MarkerSize=0.1,LineWidth=3);

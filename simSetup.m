@@ -4,10 +4,10 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% Simulation Setup
-%importfile('Case.mat'); % ablation study
+importfile('ablation_study.mat'); % ablation study
 % importfile('APFT_small_scene1.mat');
 importfile('structured_map.mat');
-importfile('scenario.mat'); % comparison
+%importfile('scenario.mat'); % comparison
 
 traj_rbt = cell(5,50);
 particles_all = cell(5,50,200);
@@ -21,7 +21,7 @@ set(0,'DefaultFigureWindowStyle','normal');
 
 sim_len = 200; % simulation duration
 dt = 1;
-plan_mode = 'GM-PHD-SAT'; % choose the mode of simulation: NBV, sampling, ASPIRe, GM-PHD-SAT, Cell-MB-SWT
+plan_mode = 'ASPIRe'; % choose the mode of simulation: NBV, sampling, ASPIRe, GM-PHD-SAT, Cell-MB-SWT
 
 % parameter for target motion model: 
 % 'static', 'lin'(ear), 'cir'(cular), 'sin'(usoidal), 'ped'(estrian)
@@ -58,7 +58,8 @@ target.pos = [45;45.5;0];
 target.pos = [22;18;0];
 
 target.pos = targetPose(tt,:)';
-target.pos = [targetPose(tt,1,1);targetPose(tt,1,2);targetPose(tt,1,3)];
+%target.pos = [targetPose(tt,1,1);targetPose(tt,1,2);targetPose(tt,1,3)];
+target.pos = [targetPose(tt,1);targetPose(tt,2);targetPose(tt,3)];
 %target.pos = [45;45.5;0];
 
 target.targetPose = targetPose;
@@ -86,7 +87,7 @@ switch tar_model
         %}
 end
 target.Q_search = [0.1 0;0 0.1];
-target.Q_search = [1 0;0 1];
+%target.Q_search = [1 0;0 1];
 %target.Q_search = [1 0 0;0 1 0;0 0 0.01];
 %target.Q_search = zeros(3);
 target.Q_tracking = [1 0;0 1];

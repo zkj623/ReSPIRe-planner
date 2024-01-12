@@ -439,6 +439,9 @@ classdef RobotClass
                         obs_var(2) = mod(obs_var(2),pi*2);
                     end
                     x_next = x_pred+K*obs_var;
+                    if any([1;1] >= x_next(1:2))||any([49;49] <= x_next(1:2))
+                        x_next = [state(1)+y(1)*cos(y(2)+state(3));state(2)+y(1)*sin(y(2)+state(3))];
+                    end
                     P_next = P_pred-K*C*P_pred;
 
                     M = C*P_pred*C'+R;
@@ -450,7 +453,11 @@ classdef RobotClass
 
                     M = C*P_pred*C'+R;
                     M = (M + M') / 2;
-                    alp(ii) = 1-mvnpdf(y,h(x_pred,state),M)/mvnpdf(y,y,M);
+                    %alp(ii) = 1-mvnpdf(y,h(x_pred,state),M)/mvnpdf(y,y,M);
+                    alp(ii) = 1;
+                    if this.inFOV(this.map.occ_map,state,x_next,1)
+                        alp(ii) = 0.01;
+                    end
                 end
 
                 x_next_tmp = x_next;
@@ -517,13 +524,8 @@ classdef RobotClass
 
                         cell(ii,jj) = mvnpdf(obs_var,[0;0],R);
 
-                        %{
-                        if ~this.inFOV(this.map.occ_map,this.state,[ii*this.cell_size-this.cell_size/2;jj*this.cell_size-this.cell_size/2],1)
-                            cell(ii,jj) = 0;
-                        end
-                        %}
                     else
-                        if this.inFOV(this.map.occ_map,this.state,[ii*this.cell_size-this.cell_size/2;jj*this.cell_size-this.cell_size/2],1)
+                        if this.inFOV(this.map.occ_map,state,[ii*this.cell_size-this.cell_size/2;jj*this.cell_size-this.cell_size/2],1)
                             cell(ii,jj) = 0;
                         end
                     end
@@ -752,13 +754,13 @@ classdef RobotClass
             end
 
             if isStateValid(sv,this.state(1:3)')&&isStateValid(sv,goal(1:3))
-                [path,directions] = plan(planner,this.state(1:3)',goal(1:3),SearchMode='greedy');
+                [path,directions,solutionInfo] = plan(planner,this.state(1:3)',goal(1:3),SearchMode='greedy');
             else
                 disp('start or target is invalid');
                 directions = [];
             end
 
-            if length(directions) >= 3 && sum(directions(1:3)) == 3
+            if length(directions) >= 3 && sum(directions(1:3)) == 3 && solutionInfo.IsPathFound == 1
                 if this.is_tracking
                     this.planned_traj = path.States(1:4,:)';
                 else
@@ -1930,12 +1932,7 @@ classdef RobotClass
                             tree_tmp(begin).r = rollout;
                         else
                             [Idx,D] = knnsearch(this.allstate(1:2,:)',node.state(1:2)');
-                            %{
-                        % for debug only
-                        if begin == this.allstate(4,Idx)
-                            1
-                        end
-                            %}
+       
                             if D < 3 && norm(this.allstate(3,Idx)-node.state(3)) < pi %&& begin ~= this.allstate(4,Idx)
                                 rollout = tree_tmp(this.allstate(4,Idx)).r;
                                 tree_tmp(begin).r = rollout;
@@ -2020,21 +2017,10 @@ classdef RobotClass
                             tree_tmp(begin).r = rollout;
                         else
                             [Idx,D] = knnsearch(this.allstate(1:2,:)',node.state(1:2)');
-                            %{
-                        % for debug only
-                        if begin == this.allstate(4,Idx)
-                            1
-                        end
-                            %}
                             if D < 1 && norm(this.allstate(3,Idx)-node.state(3)) < pi %&& begin ~= this.allstate(4,Idx)
                                 rollout = tree_tmp(this.allstate(4,Idx)).r;
                                 tree_tmp(begin).r = rollout;
                             else
-                                %{
-                                simIndex = simIndex + 1;
-                                rollout = this.rollOut(fld,sim,node,eta,depth-1,B,w,simIndex,tt,pt,ps,flg);
-                                %}
-                                %
                                 simIndex = simIndex + 1;
                                 rollout = this.rollOut(fld,sim,node,eta,depth-1,B,w,simIndex,tt,pt,ps,flg);
                                 this.allstate = [this.allstate [node.state(1:3);begin]];
@@ -2076,7 +2062,7 @@ classdef RobotClass
                                             tree_tmp = backup(this,tree_tmp,ii,-5,eta);
                                                 %}
                                             else
-                                                if norm(this.allstate(1:2,end)-tmp(1:2,end)) < 0.5 && norm(this.allstate(3,end)-tmp(3,end)) < pi
+                                                if norm(this.allstate(1:2,end)-tmp(1:2,end)) < 0.6 && norm(this.allstate(3,end)-tmp(3,end)) < pi
                                                     % expand with rollout reward
                                                     state = tmp(:,end);
                                                     state = [state;action(4)];
@@ -2097,10 +2083,11 @@ classdef RobotClass
                                         end
                                     end
                                 end
-                                %}
+                                %
                                 % toc
                             end
                         end
+                        %}
                     end
                     %}
 
@@ -2424,6 +2411,7 @@ classdef RobotClass
                     if ~this.is_tracking
                         target = this.vir_tar;
                     end
+                    %}
                     mindis = 100000;
                     max_rew = -100000;
                     for jj = 1:size(node.a,2)
@@ -2515,7 +2503,7 @@ classdef RobotClass
 
                         reward = 3*exp(-norm(node.state(1:2)-target));
                         %{
-                        if ~this.is_tracking
+                        if ~this.first
                             reward = 3*exp(-norm(node.state(1:2)-target));
                         end
                         %}

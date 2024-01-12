@@ -27,8 +27,8 @@ runtime = zeros(50,1);
 %rng(0)
 
 %for tt = [1 2 3 5 6 7 9] %1:50 %44 %47
-%for tt = 1:10
-for tt = [4]
+for tt = 1:10
+%for tt = [1]
 
 % set up parameters
 simSetup;
@@ -134,9 +134,6 @@ for ii = 1:sim_len
     if strcmp(plan_mode,'GM-PHD-SAT')
         [rbt.gmm_w,rbt.gmm_mu,rbt.gmm_P] = rbt.GM_PHD(fld,sim,tt,ii,rbt.state,rbt.y);
         rbt.est_pos = rbt.gmm_mu*rbt.gmm_w';
-        rbt.est_pos_hist = [rbt.est_pos_hist rbt.est_pos];
-
-        error{tt}(ii,zz) = norm(rbt.est_pos(1:2)-fld.target.pos(1:2));
     elseif strcmp(plan_mode,'Cell-MB-SWT')
         [rbt.particles,rbt.w] = rbt.PF(fld,sim,tt,ii,rbt.state,rbt.particles,rbt.w,rbt.y,1);
         rbt.cell = rbt.cell_PHD(fld,sim,tt,ii,rbt.state,rbt.y);
@@ -147,11 +144,10 @@ for ii = 1:sim_len
                 rbt.est_pos = rbt.est_pos + rbt.cell(jj,kk)*rbt.cell_size^2*[rbt.cell_size*jj-rbt.cell_size/2;rbt.cell_size*kk-rbt.cell_size/2];
             end
         end
-        rbt.est_pos_hist = [rbt.est_pos_hist rbt.est_pos];
-
-        error{tt}(ii,zz) = norm(rbt.est_pos(1:2)-fld.target.pos(1:2));
     else
         % particle filtering
+
+        % prediction
         %{
     if rbt.pred == 0
         vis_len = length(find(rbt.inFOV_hist==1));
@@ -174,11 +170,14 @@ for ii = 1:sim_len
         %}
         [rbt.particles,rbt.w] = rbt.PF(fld,sim,tt,ii,rbt.state,rbt.particles,rbt.w,rbt.y,1);
         rbt.est_pos = rbt.particles*rbt.w';
-        rbt.est_pos_hist = [rbt.est_pos_hist rbt.est_pos];
+    end
 
-        error{tt}(ii,zz) = norm(rbt.est_pos(1:2)-fld.target.pos(1:2));
+    rbt.est_pos_hist = [rbt.est_pos_hist rbt.est_pos];
+    error{tt}(ii,zz) = norm(rbt.est_pos(1:2)-fld.target.pos(1:2));
 
-        % hgrid
+    %tic
+    % hierarchical particles
+    if strcmp(plan_mode,'ASPIRe')
         particles = rbt.particles;
         w = rbt.w;
         Cidx = zeros(size(particles,2),2);
@@ -222,25 +221,60 @@ for ii = 1:sim_len
         rbt.first_particles = particles;
         rbt.first_w = w;
 
+        % Solve TSP problem to determine the target point
+
         %{
-    kk = 1;
-    for jj = 1:size(rbt.first_particles,2)
-        if norm(rbt.first_particles(:,kk)) == 0 || rbt.first_w(kk) < 0.05 %0.10
-            rbt.first_particles(:,kk) = [];
-            rbt.first_w(kk) = [];
-            kk = kk-1;
-        end
-        kk = kk+1;
-    end
+        dist_matrix = pdist2(rbt.first_particles', rbt.first_particles');
+        [~, path] = tsp_solver(dist_matrix);
+        target_index = path(1);
+        target_point = rbt.first_particles(:, target_index);
         %}
 
+
+        %{
+        dist_all = vecnorm(rbt.state(1:2)-rbt.first_particles(1:2,:));
+        %{
+        planner = plannerAStarGrid(rbt.map.occ_map);
+        for jj = 1:size(rbt.first_particles,2)
+            [~,info] = plan(planner,rbt.state(1:2)',rbt.first_particles(1:2,jj)','world');
+            dist_all(jj) = info.PathCost;
+        end
+        %}
+        dist_all = dist_all.*exp(-w);
+        [dist_sort,I] = sort(dist_all);
+        w = w(I);
+        for jj = 1:size(dist_sort,2)
+            if w(jj)>0.05
+                id = jj;
+                break
+            end
+        end
+        % [mindist,id] = min(dist_all);
+        rbt.vir_tar = rbt.first_particles(1:2,I(id));
+        rbt.loc_par = rbt.h_particles(I(id)).third_par;
+        rbt.loc_w = rbt.h_particles(I(id)).third_w;
+        %}
+
+        %{
+        kk = 1;
+        for jj = 1:size(rbt.first_particles,2)
+            if norm(rbt.first_particles(:,kk)) == 0 || rbt.first_w(kk) < 0.05 %0.10
+                rbt.first_particles(:,kk) = [];
+                rbt.first_w(kk) = [];
+                kk = kk-1;
+            end
+            kk = kk+1;
+        end
+        %}
+
+        %
         flg = 0;
         idx = ceil(rbt.vir_tar(1)/grid_size);
         idy = ceil(rbt.vir_tar(2)/grid_size);
         for jj = 1:size(rbt.first_particles,2)
             idx_tmp = ceil(rbt.first_particles(1,jj)/grid_size);
             idy_tmp = ceil(rbt.first_particles(2,jj)/grid_size);
-            if idx_tmp == idx && idy_tmp == idy && rbt.first_w(jj) > 0.02
+            if idx_tmp == idx && idy_tmp == idy && rbt.first_w(jj) > 0.15
                 flg = 1;
                 tmp = jj;
                 break
@@ -260,11 +294,10 @@ for ii = 1:sim_len
             end
             % [mindist,id] = min(dist_all);
             rbt.vir_tar = rbt.first_particles(1:2,I(id));
-
             rbt.loc_par = rbt.h_particles(I(id)).third_par;
             rbt.loc_w = rbt.h_particles(I(id)).third_w;
         else
-            %{
+        %{
         dist_all = vecnorm(rbt.state(1:2)-rbt.first_particles(1:2,:));
         %     dist_all = dist_all.*exp(w);
         [dist_sort,I] = sort(dist_all);
@@ -275,19 +308,19 @@ for ii = 1:sim_len
                 break
             end
         end
-            %}
+        %}
 
             rbt.vir_tar = rbt.first_particles(1:2,tmp);
-
             rbt.loc_par = rbt.h_particles(tmp).third_par;
             rbt.loc_w = rbt.h_particles(tmp).third_w;
         end
+        %}
     end
 
     %% robot motion planning
     %
     tic
-
+    
     if strcmp(plan_mode,'NBV')
         [rbt,optz] = rbt.Planner_NBV(fld,sim,plan_mode,ps,pt,tt,ii);
     elseif strcmp(plan_mode,'sampling')
@@ -296,7 +329,6 @@ for ii = 1:sim_len
         [rbt,optz] = rbt.Planner_PFT(fld,sim,plan_mode,ps,pt,tt,ii);
     elseif strcmp(plan_mode,'ASPIRe')
         [rbt,optz] = rbt.Planner_HPFT(fld,sim,plan_mode,ps,pt,tt,ii);
-        list(ii,1:length(rbt.tree)) = rbt.tree;
     elseif strcmp(plan_mode,'GM-PHD-SAT')
         [rbt,optz] = rbt.Planner_GMPHD(fld,sim,plan_mode,ps,pt,tt,ii);
     elseif strcmp(plan_mode,'Cell-MB-SWT')
@@ -304,6 +336,10 @@ for ii = 1:sim_len
     end
 
     t = toc
+
+    if strcmp(plan_mode,'ASPIRe')
+        list(ii,1:length(rbt.tree)) = rbt.tree;
+    end
 
     %}
 
@@ -417,7 +453,7 @@ for ii = 1:sim_len
     clf
 
     % skip tracking
-    %{
+    %
     if rbt.is_tracking
         pause(1);
         clf
@@ -442,7 +478,6 @@ end
 %     if ii == 166
 %     ax = gca;
 %     exportgraphics(ax,strcat('sim_0828_multi',num2str(ii),'.png'));
-%     %exportgraphics(ax,strcat('sim_0828_',num2str(ii),'.png'));
 %     end
 
 traj_rbt{zz,tt} = rbt.traj;
