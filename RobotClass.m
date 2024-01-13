@@ -2017,7 +2017,7 @@ classdef RobotClass
                             tree_tmp(begin).r = rollout;
                         else
                             [Idx,D] = knnsearch(this.allstate(1:2,:)',node.state(1:2)');
-                            if D < 1 && norm(this.allstate(3,Idx)-node.state(3)) < pi %&& begin ~= this.allstate(4,Idx)
+                            if D < 1 && norm(this.allstate(3,Idx)-node.state(3)) < pi %/4 && begin ~= this.allstate(4,Idx)
                                 rollout = tree_tmp(this.allstate(4,Idx)).r;
                                 tree_tmp(begin).r = rollout;
                             else
@@ -2062,7 +2062,7 @@ classdef RobotClass
                                             tree_tmp = backup(this,tree_tmp,ii,-5,eta);
                                                 %}
                                             else
-                                                if norm(this.allstate(1:2,end)-tmp(1:2,end)) < 0.6 && norm(this.allstate(3,end)-tmp(3,end)) < pi
+                                                if norm(this.allstate(1:2,end)-tmp(1:2,end)) < 0.6 && norm(this.allstate(3,end)-tmp(3,end)) < pi %/4
                                                     % expand with rollout reward
                                                     state = tmp(:,end);
                                                     state = [state;action(4)];

@@ -5,14 +5,11 @@ close all
 importfile('result_ablation.mat');
 
 %set(gcf,'position',[600,100,900,1200]);
-Mean = zeros(6,4);
-Var = zeros(6,4);
+Mean = zeros(10,4);
+Var = zeros(10,4);
 
-for ii = 1:6
+for ii = 1:10
 
-figure
-%subplot(3,2,1)
-hold on
 data_tmp1 = data_van(ii,:)';
 data_tmp2 = data_reuse(ii,:)';
 data_tmp3 = data_hier(ii,:)';
@@ -30,6 +27,9 @@ Var(ii,3) = std(data_tmp3,"omitnan");
 Mean(ii,4) = mean(data_tmp4,"omitnan");
 Var(ii,4) = std(data_tmp4,"omitnan");
 
+%{
+figure
+hold on
 vec = [data_tmp1 data_tmp2 data_tmp3 data_tmp4];
 boxplot(vec,  'Widths', 0.5);
 xlim([0.5 4.5]);
@@ -38,6 +38,7 @@ xlim([0.5 4.5]);
 set(gca,'xtick',1:4);
 set(gca,'XTickLabel',{'vanilla','reuse','hierarchy','reuse+hierarchy'},'FontSize',20,'FontName','Times New Roman','FontWeight','bold'); %修改横坐标名称、字体
 title(strcat('Scenario',num2str(ii)));
+%}
 
 end
 

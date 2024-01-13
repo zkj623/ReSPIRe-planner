@@ -274,7 +274,7 @@ for ii = 1:sim_len
         for jj = 1:size(rbt.first_particles,2)
             idx_tmp = ceil(rbt.first_particles(1,jj)/grid_size);
             idy_tmp = ceil(rbt.first_particles(2,jj)/grid_size);
-            if idx_tmp == idx && idy_tmp == idy && rbt.first_w(jj) > 0.15
+            if idx_tmp == idx && idy_tmp == idy && rbt.first_w(jj) > 0.02 % ablation:Q小,0.15; comparison:Q大,0.02
                 flg = 1;
                 tmp = jj;
                 break
@@ -283,6 +283,7 @@ for ii = 1:sim_len
 
         if flg == 0
             dist_all = vecnorm(rbt.state(1:2)-rbt.first_particles(1:2,:));
+            %dist_all = dist_all.*exp(-w);
             %     dist_all = dist_all.*exp(w);
             [dist_sort,I] = sort(dist_all);
             w = w(I);

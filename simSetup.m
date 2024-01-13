@@ -4,10 +4,9 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% Simulation Setup
-importfile('ablation_study.mat'); % ablation study
-% importfile('APFT_small_scene1.mat');
 importfile('structured_map.mat');
-%importfile('scenario.mat'); % comparison
+%importfile('ablation_study.mat'); % ablation study
+importfile('scenario.mat'); % comparison
 
 traj_rbt = cell(5,50);
 particles_all = cell(5,50,200);
@@ -58,8 +57,8 @@ target.pos = [45;45.5;0];
 target.pos = [22;18;0];
 
 target.pos = targetPose(tt,:)';
-%target.pos = [targetPose(tt,1,1);targetPose(tt,1,2);targetPose(tt,1,3)];
-target.pos = [targetPose(tt,1);targetPose(tt,2);targetPose(tt,3)];
+target.pos = [targetPose(tt,1,1);targetPose(tt,1,2);targetPose(tt,1,3)];
+%target.pos = [targetPose(tt,1);targetPose(tt,2);targetPose(tt,3)];
 %target.pos = [45;45.5;0];
 
 target.targetPose = targetPose;
@@ -87,7 +86,7 @@ switch tar_model
         %}
 end
 target.Q_search = [0.1 0;0 0.1];
-%target.Q_search = [1 0;0 1];
+target.Q_search = [1 0;0 1];
 %target.Q_search = [1 0 0;0 1 0;0 0 0.01];
 %target.Q_search = zeros(3);
 target.Q_tracking = [1 0;0 1];

@@ -57,6 +57,12 @@ figure
 show(occ_map)
 set(gcf,'position',[600,200,1920,1080]);
 
+set(gca, 'FontSize', 20);
+xticks(0:10:50);
+xticklabels({'0','10','20','30','40','50'});
+yticks(0:10:50);
+yticklabels({'0','10','20','30','40','50'});
+
 region_tmp1 = occupancyMatrix(occ_map);
 
 % inflate(occ_map,0.5);
