@@ -63,6 +63,7 @@ target.pos = [targetPose(tt,1,1);targetPose(tt,1,2);targetPose(tt,1,3)];
 
 target.targetPose = targetPose;
 
+%{
 switch tar_model
     case 'static'
         %%% setup for static target
@@ -83,8 +84,10 @@ switch tar_model
         target.f = @(x) x+[u(1);u(2)*cos(0.2*x(1))];
         target.del_f = @(x) [1 0; -u(2)*sin(x(1)) 1];
         target.Q = 0.25*eye(2); %0.04 % Covariance of process noise model for the target
-        %}
+        %
 end
+%}
+
 target.Q_search = [0.1 0;0 0.1];
 target.Q_search = [1 0;0 1];
 %target.Q_search = [1 0 0;0 1 0;0 0 0.01];
@@ -112,6 +115,7 @@ grid_step = 0.5; % the side length of a probability cell
 map.region = 1-region1;
 map.region_exp = 1-region;
 map.occ_map = occ_map;
+%map.occ_map = map.region;
 
 inPara_fld = struct('fld_cor',[xMin,xMax,yMin,yMax],'target',target,'dt',dt,'map',map);
 fld = FieldClass(inPara_fld);
@@ -147,9 +151,9 @@ inPara_rbt.w_ub = pi/4;
 inPara_rbt.v_lb = 0;
 inPara_rbt.v_ub = 3;
 % robot kinematics
-inPara_rbt.g = @(z,u) z+u*dt;
+%inPara_rbt.g = @(z,u) z+u*dt;
 inPara_rbt.Qr = blkdiag(0.09*eye(2),[0.01,0;0,0.04]);
-inPara_rbt.del_g = @(z,u) z+u*dt;
+%inPara_rbt.del_g = @(z,u) z+u*dt;
 % target defintion
 inPara_rbt.target = target;
 
@@ -158,6 +162,7 @@ map.size = 50;
 map.region = zeros(map.size*5);
 map.region_exp = zeros(map.size*5);
 map.occ_map = occupancyMap(50,50,5);
+%map.occ_map = zeros(map.size*5);
 inPara_rbt.map = map;
 
 % sensor
@@ -177,8 +182,8 @@ inPara_rbt.pred = 0;
 switch sensor_type 
     case 'rb'
         % range-bearing sensor
-        inPara_rbt.h = @(x,z) [sqrt(sum((x(1:2,:)-z(1:2)).^2)+0.1);atan2(x(2,:)-z(2),x(1,:)-z(1))-z(3)];
-        inPara_rbt.del_h = @(x,z) [(x(1:2)-z(1:2))'/sqrt(sum((x(1:2,:)-z(1:2)).^2)+0.1); [-(x(2)-z(2))/sum((x(1:2,:)-z(1:2)).^2) (x(1)-z(1))/sum((x(1:2,:)-z(1:2)).^2)]]; % z is the robot state.
+        %inPara_rbt.h = @(x,z) [sqrt(sum((x(1:2,:)-z(1:2)).^2)+0.1);atan2(x(2,:)-z(2),x(1,:)-z(1))-z(3)];
+        %inPara_rbt.del_h = @(x,z) [(x(1:2)-z(1:2))'/sqrt(sum((x(1:2,:)-z(1:2)).^2)+0.1); [-(x(2)-z(2))/sum((x(1:2,:)-z(1:2)).^2) (x(1)-z(1))/sum((x(1:2,:)-z(1:2)).^2)]]; % z is the robot state.
         inPara_rbt.R = [0.1 0;0 0.01];
         inPara_rbt.mdim = 2;
     case 'ran'
@@ -279,6 +284,8 @@ a = zeros(5,7); % action space
 interpolated_points = zeros(7,2,3);
 ps = {};
 vel = 30;
+
+% vel = 5;
 inputs = [vel pi/4;vel pi/8;vel -pi/4;vel -pi/8;vel 0;0 pi/4;0 -pi/4];
 
 %{
@@ -345,6 +352,28 @@ inputs =[15 pi/16;
     15 0;
     10 0;
     5 0;
+    0 pi/16;
+    0 pi/4;
+    0 -pi/16;
+    0 -pi/4];
+%}
+
+%{
+inputs =[3 pi/16;
+    2 pi/16;
+    1 pi/16;
+    3 pi/8;
+    2 pi/8;
+    1 pi/8;
+    3 -pi/16;
+    2 -pi/16;
+    1 -pi/16;
+    3 -pi/8;
+    2 -pi/8;
+    1 -pi/8;
+    3 0;
+    2 0;
+    1 0;
     0 pi/16;
     0 pi/4;
     0 -pi/16;

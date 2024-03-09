@@ -27,8 +27,8 @@ runtime = zeros(50,1);
 %rng(0)
 
 %for tt = [1 2 3 5 6 7 9] %1:50 %44 %47
-for tt = 1:10
-%for tt = [1]
+%for tt = 1:10
+for tt = [1]
 
 % set up parameters
 simSetup;
@@ -55,6 +55,8 @@ list = repmat(Node_IMPFT,210,500);
 
 for ii = 1:sim_len
     %fprintf('[main loop] gameSim.m, line %d, iteration %d, Progress: %d\n',MFileLineNr(),ii,ii/sim_len)
+
+%     tic
 
     %% target moves
     fld = fld.targetMove(tt,ii);
@@ -195,7 +197,11 @@ for ii = 1:sim_len
             end
         end
 
-        rbt.h_particles = repmat(hpar,N,1);
+        % rbt.h_particles = repmat(hpar,N,1);
+        rbt.h_particles = cell(N,1);
+        for jj = 1:N
+            rbt.h_particles{jj} = hpar;
+        end
 
         particles_tmp = particles;
         w_tmp = w;
@@ -208,14 +214,14 @@ for ii = 1:sim_len
         for mm = 1:size(particles_tmp,2)
             id = flag(Cidx(mm,1),Cidx(mm,2));
             particles(:,id) = particles(:,id) + particles_tmp(:,mm).*w_tmp(mm)./w(id);
-            rbt.h_particles(id).third_par = [rbt.h_particles(id).third_par particles_tmp(:,mm)];
-            rbt.h_particles(id).third_w = [rbt.h_particles(id).third_w w_tmp(mm)];
+            rbt.h_particles{id}.third_par = [rbt.h_particles{id}.third_par particles_tmp(:,mm)];
+            rbt.h_particles{id}.third_w = [rbt.h_particles{id}.third_w w_tmp(mm)];
         end
 
         for jj = 1:size(rbt.h_particles,1)
-            rbt.h_particles(jj).num = jj;
-            rbt.h_particles(jj).first_w = w(jj);
-            rbt.h_particles(jj).first_par = particles(:,jj);
+            rbt.h_particles{jj}.num = jj;
+            rbt.h_particles{jj}.first_w = w(jj);
+            rbt.h_particles{jj}.first_par = particles(:,jj);
         end
 
         rbt.first_particles = particles;
@@ -295,8 +301,8 @@ for ii = 1:sim_len
             end
             % [mindist,id] = min(dist_all);
             rbt.vir_tar = rbt.first_particles(1:2,I(id));
-            rbt.loc_par = rbt.h_particles(I(id)).third_par;
-            rbt.loc_w = rbt.h_particles(I(id)).third_w;
+            rbt.loc_par = rbt.h_particles{I(id)}.third_par;
+            rbt.loc_w = rbt.h_particles{I(id)}.third_w;
         else
         %{
         dist_all = vecnorm(rbt.state(1:2)-rbt.first_particles(1:2,:));
@@ -312,11 +318,48 @@ for ii = 1:sim_len
         %}
 
             rbt.vir_tar = rbt.first_particles(1:2,tmp);
-            rbt.loc_par = rbt.h_particles(tmp).third_par;
-            rbt.loc_w = rbt.h_particles(tmp).third_w;
+            rbt.loc_par = rbt.h_particles{tmp}.third_par;
+            rbt.loc_w = rbt.h_particles{tmp}.third_w;
         end
         %}
     end
+
+    %
+    Cidx = zeros(size(rbt.loc_par,2),2);
+    flag = zeros(200,200);
+    N = 0;
+    if rbt.is_tracking
+        grid_size = 1;
+    else
+        grid_size = 2.5;
+    end
+    for mm = 1:size(rbt.loc_par,2)
+        id1 = ceil(rbt.loc_par(1,mm)/grid_size)+5;
+        Cidx(mm,1) = id1;
+        id2 = ceil(rbt.loc_par(2,mm)/grid_size)+5;
+        Cidx(mm,2) = id2;
+        if flag(id1,id2) == 0
+            N = N + 1;
+            flag(id1,id2) = N;
+        end
+    end
+    %N
+    particles_tmp = rbt.loc_par;
+    w_tmp = rbt.loc_w;
+    particles = zeros(2,N);
+    w = zeros(1,N);
+    for mm = 1:size(particles_tmp,2)
+        w(flag(Cidx(mm,1),Cidx(mm,2))) = w(flag(Cidx(mm,1),Cidx(mm,2))) + w_tmp(mm);
+    end
+    for mm = 1:size(particles_tmp,2)
+        particles(:,flag(Cidx(mm,1),Cidx(mm,2))) = particles(:,flag(Cidx(mm,1),Cidx(mm,2))) + particles_tmp(:,mm).*w_tmp(mm)./w(flag(Cidx(mm,1),Cidx(mm,2)));
+    end
+
+    rbt.loc_par2 = particles;
+    rbt.loc_w2 = w;
+    %}
+
+%     t = toc
 
     %% robot motion planning
     %
@@ -383,7 +426,7 @@ for ii = 1:sim_len
         writeVideo(vidObj,frame);
     end   
 
-    %{
+    %
     if ii == sim_len
         figure
         hold on
@@ -394,9 +437,11 @@ for ii = 1:sim_len
         inflate(map_tmp,0.5);
         show(map_tmp)
 
-        plot(rbt.particles(1,:),rbt.particles(2,:),'.','Color',[0 1 0.5]);
-        plot(rbt.loc_par(1,:),rbt.loc_par(2,:),'.','Color',[0.9290 0.6940 0.1250]);
-        plot(rbt.est_pos(1),rbt.est_pos(2),"^",'Color','r','MarkerFaceColor','r',MarkerSize=15);
+        %plot(rbt.particles(1,:),rbt.particles(2,:),'.','Color',[0 1 0.5]);
+        if strcmp(plan_mode,'ASPIRe')
+            plot(rbt.loc_par(1,:),rbt.loc_par(2,:),'.','Color',[0.9290 0.6940 0.1250]);
+        end
+        %plot(rbt.est_pos(1),rbt.est_pos(2),"^",'Color','r','MarkerFaceColor','r',MarkerSize=15);
 
         if ~rbt.is_tracking
             for jj = 1:size(rbt.first_particles,2)
@@ -415,15 +460,21 @@ for ii = 1:sim_len
         %plot(rbt.traj(1,1:end-1),rbt.traj(2,1:end-1),'-','Color','r',MarkerSize=0.1,LineWidth=3);
 
         % Plot the trajectory with gradient color
-        len = size(rbt.traj,2)/21;
+        if strcmp(plan_mode,'sampling')
+            len = 200;
+            step = floor(size(rbt.traj,2)/200);
+        else
+            len = size(rbt.traj,2)/21;
+            step = 21;
+        end
         for kk = 1:len
             color = interp1(linspace(1, 200, size(cmap, 1)), cmap, kk);
             if kk == len
-                for jj = (kk-1)*21+1:kk*21-1
+                for jj = (kk-1)*step+1:kk*step-1
                     plot(rbt.traj(1,jj:jj+1),rbt.traj(2,jj:jj+1), 'Color', color, 'LineWidth', 3);
                 end
             else
-                for jj = (kk-1)*21+1:kk*21
+                for jj = (kk-1)*step+1:kk*step
                     plot(rbt.traj(1,jj:jj+1),rbt.traj(2,jj:jj+1), 'Color', color, 'LineWidth', 3);
                 end
             end
@@ -446,7 +497,7 @@ for ii = 1:sim_len
 
         set(gcf,'position',[500,200,1080,720]);
         f = getframe(gcf);
-        imwrite(f.cdata, strcat('case',num2str(tt),'.png'));
+        imwrite(f.cdata, strcat('20240301_case',num2str(tt),'.png'));
         pause(5)
     end
     %}
@@ -454,7 +505,7 @@ for ii = 1:sim_len
     clf
 
     % skip tracking
-    %
+    %{
     if rbt.is_tracking
         pause(1);
         clf

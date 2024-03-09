@@ -32,8 +32,8 @@ classdef RobotClass
         pred;
 
         % for general nonlinear sensors
-        h; % y=h(x)
-        del_h; % gradient of h
+        %h; % y=h(x)
+        %del_h; % gradient of h
         R; % variance(1-d)/covariance(high-d) for sensor model
         mdim; % dimension of sensor measurement
 
@@ -69,6 +69,8 @@ classdef RobotClass
         vir_tar;
         loc_par;
         loc_w;
+        loc_par2;
+        loc_w2;
 
         tree;
         allstate;
@@ -121,8 +123,8 @@ classdef RobotClass
 
             % sensor specs
             this.R = inPara.R;
-            this.h = inPara.h;
-            this.del_h = inPara.del_h;
+            %this.h = inPara.h;
+            %this.del_h = inPara.del_h;
             this.theta0 = inPara.theta0;
             this.rmin = inPara.minrange;
             this.rmax = inPara.maxrange;
@@ -355,8 +357,8 @@ classdef RobotClass
             P = this.P;
 
             % sensor
-            h = this.h;
-            del_h = this.del_h;
+            %h = this.h;
+            %del_h = this.del_h;
             R = this.R;
 
             % prediction
@@ -368,7 +370,7 @@ classdef RobotClass
             if sum(y-[-100;-100]) ~= 0
                 % if an observation is obtained
                 K = P_pred*C'/(C*P_pred*C'+R);
-                x_next = x_pred+K*(y-h(x_pred,this.state(1:2)));%C*x_pred-(x_pred-this.state(1:2))
+                x_next = x_pred+K*(y-this.h(x_pred,this.state(1:2)));%C*x_pred-(x_pred-this.state(1:2))
                 P_next = P_pred-K*C*P_pred;
             else
                 x_next = x_pred;
@@ -388,7 +390,7 @@ classdef RobotClass
         function [w,mu,P] = GM_PHD(this,fld,sim,tt,ii,state,y)
 
             R = this.R;
-            h = this.h;
+            %h = this.h;
             if this.is_tracking
                 Q = fld.target.Q_tracking;
             else
@@ -396,7 +398,7 @@ classdef RobotClass
             end
             
             % sensor
-            del_h = this.del_h;
+            %del_h = this.del_h;
             
             % used for updating gmm component weights
             alp = ones(1,this.gmm_num);
@@ -432,7 +434,7 @@ classdef RobotClass
                 if sum(y-[-100;-100]) ~= 0
                     % if an observation is obtained
                     K = P_pred*C'/(C*P_pred*C'+R);
-                    obs_var = y-h(x_pred,state);
+                    obs_var = y-this.h(x_pred,state);
                     if abs(mod(obs_var(2),pi*2))>=abs(mod(obs_var(2),-pi*2))
                         obs_var(2) = mod(obs_var(2),-pi*2);
                     else
@@ -477,7 +479,7 @@ classdef RobotClass
         % cell-PHD filter
         function cell = cell_PHD(this,fld,sim,tt,ii,state,y)
             R = this.R;
-            h = this.h;
+            %h = this.h;
             if this.is_tracking
                 Q = fld.target.Q_tracking;
             else
@@ -485,7 +487,7 @@ classdef RobotClass
             end
             
             % sensor
-            del_h = this.del_h;
+            %del_h = this.del_h;
             
             % current estimation
             cell = zeros(size(this.cell,1),size(this.cell,2));
@@ -515,7 +517,7 @@ classdef RobotClass
                     % update
                     if sum(y-[-100;-100]) ~= 0
                         % if an observation is obtained
-                        obs_var = y-h([ii*this.cell_size-this.cell_size/2;jj*this.cell_size-this.cell_size/2],state);
+                        obs_var = y-this.h([ii*this.cell_size-this.cell_size/2;jj*this.cell_size-this.cell_size/2],state);
                         if abs(mod(obs_var(2),pi*2))>=abs(mod(obs_var(2),-pi*2))
                             obs_var(2) = mod(obs_var(2),-pi*2);
                         else
@@ -546,7 +548,7 @@ classdef RobotClass
 
             %particles = this.particles;
             R = this.R;
-            h = this.h;
+            %h = this.h;
             N = size(particles,2);
             if this.is_tracking
                 Q = fld.target.Q_tracking;
@@ -576,17 +578,17 @@ classdef RobotClass
 
             FOV = this.inFOV(this.map.occ_map,state,particles(1:2,:),1);
             if strcmp(sim.sensor_type,'rb')
-                mu = h(particles(1:2,:),state);
+                mu = this.h(particles(1:2,:),state);
                 P = normpdf(y(1),mu(1,:),sqrt(R(1,1)));
                 %
                 P0 = normpdf(y(2),mu(2,:),sqrt(R(2,2)));
                 P1 = normpdf(y(2),mu(2,:)+2*pi,sqrt(R(2,2)));
                 P2 = normpdf(y(2),mu(2,:)-2*pi,sqrt(R(2,2)));
             else
-                P = normpdf(y,h(particles(1:2,:),z),sqrt(R));
+                P = normpdf(y,this.h(particles(1:2,:),z),sqrt(R));
                 %
-                P1 = normpdf(y,h(particles(1:2,:),z)+2*pi,sqrt(R));
-                P2 = normpdf(y,h(particles(1:2,:),z)-2*pi,sqrt(R));
+                P1 = normpdf(y,this.h(particles(1:2,:),z)+2*pi,sqrt(R));
+                P2 = normpdf(y,this.h(particles(1:2,:),z)-2*pi,sqrt(R));
                 %
             end
 
@@ -614,7 +616,7 @@ classdef RobotClass
                             w(jj) = P(jj);
                         end
                         if strcmp(sim.sensor_type,'br')
-                            if h(particles(1:2,jj),state) + z(3) <= 0
+                            if this.h(particles(1:2,jj),state) + z(3) <= 0
                                 w(jj) = max([P(jj),P1(jj)]);
                             else
                                 w(jj) = max([P(jj),P2(jj)]);
@@ -1015,7 +1017,7 @@ classdef RobotClass
                     continue
                 end
 
-                value(jj) = this.MI(fld,sim,state,B,w);
+                value(jj) = MI(this,fld,sim,state,B,w);
             end
 
             max_val = max(value);
@@ -1383,7 +1385,7 @@ classdef RobotClass
                         % Calculate new information and cost
                         Ce = distance(ss,G.Ve.X(Idx(j),:),x_new);
                         Cnew = G.C(Idx(j)) + Ce;
-                        Ie = this.MI(fld,sim,x_new',B,w);
+                        Ie = MI(this,fld,sim,x_new',B,w);
                         %p = parentNode(G.E, Idx(j));
                         Inew = Ie + G.I(Idx(j));
                         if (Inew/G.I(Idx(j)) < 1) && (Cnew > G.C(Idx(j)))
@@ -1604,8 +1606,8 @@ classdef RobotClass
             %}
             %
             if ~this.is_tracking
-                B = this.loc_par;
-                w = this.loc_w;
+                B = this.loc_par2;
+                w = this.loc_w2;
             end
             %}
 
@@ -1837,9 +1839,9 @@ classdef RobotClass
 
                 state = tree_tmp(num_a).state;
                 if this.is_tracking
-                    reward = this.MI(fld,sim,tree_tmp(num_a).state,B,w);% + this.MI(fld,sim,tree_tmp(num_a).inter_state,B,w);
+                    reward = MI(this,fld,sim,tree_tmp(num_a).state,B,w);% + MI(this,fld,sim,tree_tmp(num_a).inter_state,B,w);
                 else
-                    reward = this.MI(fld,sim,tree_tmp(num_a).state,B,w);
+                    reward = MI(this,fld,sim,tree_tmp(num_a).state,B,w);
                 end
 
                 %{
@@ -1986,7 +1988,7 @@ classdef RobotClass
                                                     [this,tree_tmp,num] = this.expand_spec(sim,ii,num,tree_tmp,state,action,a);
 
                                                     % backup
-                                                    r = eta*rollout + this.MI(fld,sim,state,B_pre,w); % + dist
+                                                    r = eta*rollout + MI(this,fld,sim,state,B_pre,w); % + dist
                                                     %r = eta*rollout + 3*exp(-norm(state(1:2)-this.vir_tar));
                                                     tree_tmp = backup(this,tree_tmp,num,r,eta);
 
@@ -2070,7 +2072,7 @@ classdef RobotClass
                                                     [this,tree_tmp,num] = this.expand_spec(sim,ii,num,tree_tmp,state,action,a);
 
                                                     % backup
-                                                    r = eta*rollout + this.MI(fld,sim,state,B_pre,w); % + dist
+                                                    r = eta*rollout + MI(this,fld,sim,state,B_pre,w); % + dist
                                                     %r = eta*rollout + 3*exp(-norm(state(1:2)-this.vir_tar));
                                                     tree_tmp = backup(this,tree_tmp,num,r,eta);
 
@@ -2565,6 +2567,7 @@ classdef RobotClass
             ratio = 1;
 
             % particle simplification
+            %
             Cidx = zeros(size(particles,2),2);
             flag = zeros(200,200);
             N = 0;
@@ -2594,7 +2597,7 @@ classdef RobotClass
             for mm = 1:size(particles_tmp,2)
                 particles(:,flag(Cidx(mm,1),Cidx(mm,2))) = particles(:,flag(Cidx(mm,1),Cidx(mm,2))) + particles_tmp(:,mm).*w_tmp(mm)./w(flag(Cidx(mm,1),Cidx(mm,2)));
             end
-            %
+            %}
 
             if this.is_tracking
                 FOV = this.inFOV_red(this.map.occ_map,state(1:3),particles,1);
@@ -2780,6 +2783,14 @@ classdef RobotClass
                 plot(z(1)+rmax*cos(theta),z(2)+rmax*sin(theta),'Color',color,'LineStyle','--',LineWidth=1);
             end
 
+        end
+
+        function obs = h(this,x,z)
+            obs = [sqrt(sum((x(1:2,:)-z(1:2)).^2)+0.1);atan2(x(2,:)-z(2),x(1,:)-z(1))-z(3)];
+        end
+
+        function obs = del_h(this,x,z)
+            obs = [(x(1:2)-z(1:2))'/sqrt(sum((x(1:2,:)-z(1:2)).^2)+0.1); [-(x(2)-z(2))/sum((x(1:2,:)-z(1:2)).^2) (x(1)-z(1))/sum((x(1:2,:)-z(1:2)).^2)]]; % z is the robot state.
         end
     end
 end
