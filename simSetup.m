@@ -134,6 +134,7 @@ inPara_rbt.state = [15;5;0;1];
 %inPara_rbt.state = [45;40;pi/2;1];
 inPara_rbt.state = [rbt_state(tt,:)';1];
 %inPara_rbt.state = [5;22;pi/2;1];
+inPara_rbt.state = [5;22;pi/2;1];
 
 %inPara_rbt.traj = inPara_rbt.state(1:3);
 inPara_rbt.traj = [];
@@ -206,7 +207,7 @@ end
 
 % estimation initialization
 
-inPara_rbt.N = 500;
+inPara_rbt.N = 100;
 % inPara_rbt.w = ones(1,inPara_rbt.N)/inPara_rbt.N;
 
 switch prior_case
@@ -352,28 +353,6 @@ inputs =[15 pi/16;
     15 0;
     10 0;
     5 0;
-    0 pi/16;
-    0 pi/4;
-    0 -pi/16;
-    0 -pi/4];
-%}
-
-%{
-inputs =[3 pi/16;
-    2 pi/16;
-    1 pi/16;
-    3 pi/8;
-    2 pi/8;
-    1 pi/8;
-    3 -pi/16;
-    2 -pi/16;
-    1 -pi/16;
-    3 -pi/8;
-    2 -pi/8;
-    1 -pi/8;
-    3 0;
-    2 0;
-    1 0;
     0 pi/16;
     0 pi/4;
     0 -pi/16;

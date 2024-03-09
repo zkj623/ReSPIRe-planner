@@ -182,15 +182,6 @@ classdef SimClass
                 %}
             else
                 plot(rbt.particles(1,:),rbt.particles(2,:),'.','Color',[0 1 0.5]);
-
-                if strcmp(plan_mode,'ASPIRe')
-                    plot(rbt.loc_par(1,:),rbt.loc_par(2,:),'.','Color',[0.9290 0.6940 0.1250]);
-                    if rbt.first
-                        for jj = 1:size(rbt.first_particles,2)
-                            plot(rbt.first_particles(1,jj),rbt.first_particles(2,jj),'.m',MarkerSize=ceil(100*rbt.first_w(jj)));
-                        end
-                    end
-                end
                 plot(rbt.est_pos(1),rbt.est_pos(2),"^",'Color','r','MarkerFaceColor','r',MarkerSize=15);
             end
 
@@ -213,35 +204,9 @@ classdef SimClass
             plot(fld.target.traj(ii+1,1),fld.target.traj(ii+1,2),"pentagram",'Color',[0.13333 0.5451 0.13333],'MarkerFaceColor',[0.13333 0.5451 0.13333],MarkerSize=15);
             plot(rbt.state(1),rbt.state(2),'ro',MarkerFaceColor='r',MarkerSize=15);
 
-            %{
-            x = rbt.state(1);
-            y = rbt.state(2);
-            % 创建一个三角形的顶点
-            len = 1;
-            vertices = [x-len, y-len, 0; x+len, y-len, 0; x, y+len, 0];
-            % 创建一个三角形的面
-            faces = [1, 2, 3];
-            % 绘制三角形
-            patch('Vertices', vertices, 'Faces', faces, 'FaceColor', 'r');
-            %}
-
-            %{
-            for jj = 1:length(rbt.tree)
-                if rbt.tree(jj).a_num ~= 0
-                    state = rbt.tree(jj).state;
-                    plot(state(1),state(2),'.c',MarkerSize=10);
-                end
-            end
-            %}
-
             rbt.drawFOV(rbt.state,fld,'cur',[0.9290 0.6940 0.1250]);
             rbt.drawFOV_red(rbt.state,fld,'cur',[1 0 1]);
 
-            text(rbt.state(1)-2,rbt.state(2)-2,num2str(rbt.value_max));
-            %             axis equal;
-            %             set(gca,'FontSize',40);
-            %             box on;
-            %
             xticks(0:10:50);
             xticklabels({'0','10','20','30','40','50'});
             yticks(0:10:50);
