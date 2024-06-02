@@ -15,7 +15,7 @@ for i = 1:10
     error{i} = zeros(200,10);
 end
 
-for zz = 1:10
+for zz = 1:5
 t_search = zeros(50,1);
 traj_length = zeros(50,1);
 t_loss = zeros(50,1);
@@ -28,7 +28,7 @@ runtime = zeros(50,1);
 
 %for tt = [1 2 3 5 6 7 9] %1:50 %44 %47
 %for tt = 1:10
-for tt = [1]
+for tt = 2
 
 % set up parameters
 simSetup;
@@ -47,7 +47,8 @@ end
 
 if save_video
     vidObj = VideoWriter(strcat(path,sprintf('unknown_%s_%s_%d_%d_%s.avi',plan_mode,sensor_type,zz,tt,datetime('today'))));
-    vidObj.FrameRate = 3;
+    vidObj.FrameRate = 5;
+    vidObj.Quality = 100;
     open(vidObj);
 end
 
@@ -280,7 +281,7 @@ for ii = 1:sim_len
         for jj = 1:size(rbt.first_particles,2)
             idx_tmp = ceil(rbt.first_particles(1,jj)/grid_size);
             idy_tmp = ceil(rbt.first_particles(2,jj)/grid_size);
-            if idx_tmp == idx && idy_tmp == idy && rbt.first_w(jj) > 0.02 % ablation:Q小,0.15; comparison:Q大,0.02
+            if idx_tmp == idx && idy_tmp == idy && rbt.first_w(jj) > 0.20 % ablation:Q小,0.15; comparison:Q大,0.02  % unstructured 0.10
                 flg = 1;
                 tmp = jj;
                 break
@@ -289,7 +290,7 @@ for ii = 1:sim_len
 
         if flg == 0
             dist_all = vecnorm(rbt.state(1:2)-rbt.first_particles(1:2,:));
-            %dist_all = dist_all.*exp(-w);
+%             dist_all = dist_all.*exp(-w);
             %     dist_all = dist_all.*exp(w);
             [dist_sort,I] = sort(dist_all);
             w = w(I);
@@ -392,6 +393,7 @@ for ii = 1:sim_len
     %pause(0.2);
 
     rbt.state = optz;
+    rbt.traj = [rbt.traj rbt.planned_traj];
 
     %
     if ii > 1
@@ -426,6 +428,7 @@ for ii = 1:sim_len
         writeVideo(vidObj,frame);
     end   
 
+    %%
     %
     if ii == sim_len
         figure
@@ -437,22 +440,29 @@ for ii = 1:sim_len
         inflate(map_tmp,0.5);
         show(map_tmp)
 
-        %plot(rbt.particles(1,:),rbt.particles(2,:),'.','Color',[0 1 0.5]);
+        %{
+        plot(rbt.particles(1,:),rbt.particles(2,:),'.','Color',[0 1 0.5]);
         if strcmp(plan_mode,'ASPIRe')
             plot(rbt.loc_par(1,:),rbt.loc_par(2,:),'.','Color',[0.9290 0.6940 0.1250]);
         end
-        %plot(rbt.est_pos(1),rbt.est_pos(2),"^",'Color','r','MarkerFaceColor','r',MarkerSize=15);
+        plot(rbt.est_pos(1),rbt.est_pos(2),"^",'Color','r','MarkerFaceColor','r',MarkerSize=15);
 
         if ~rbt.is_tracking
             for jj = 1:size(rbt.first_particles,2)
                 plot(rbt.first_particles(1,jj),rbt.first_particles(2,jj),'.m',MarkerSize=ceil(100*rbt.first_w(jj)));
             end
         end
+        %}
 
-        colorbar; % 设置颜色映射
+        c = colorbar('AxisLocation','out','Ticks',[0 1],'TickLabels',{0,200});
+        c.Label.String = 'Simulation step';
+        c.FontSize = 15;
         cmap = colormap("jet"); % 创建颜色条
 
-        %plot(fld.target.traj(1:ii+1,1),fld.target.traj(1:ii+1,2),'-','Color',[0.13333 0.5451 0.13333],LineWidth=3);
+%         plot(fld.target.traj(1:ii+1,1),fld.target.traj(1:ii+1,2),'-','Color',[0.13333 0.5451 0.13333],LineWidth=3);
+%         plot(rbt.traj(1,1:end-1),rbt.traj(2,1:end-1),'-','Color','r',MarkerSize=0.1,LineWidth=3);
+
+        %
         for jj = 1:200-1
             color = interp1(linspace(1, 200, size(cmap, 1)), cmap, jj);
             plot(fld.target.traj(jj:jj+1,1),fld.target.traj(jj:jj+1,2), 'Color', color, 'LineWidth', 2,'LineStyle','--');
@@ -462,29 +472,57 @@ for ii = 1:sim_len
         % Plot the trajectory with gradient color
         if strcmp(plan_mode,'sampling')
             len = 200;
-            step = floor(size(rbt.traj,2)/200);
+            step = floor(size(rbt.traj,2)/200)+1;
+            for kk = 1:len
+                color = interp1(linspace(1, 200, size(cmap, 1)), cmap, kk);
+                if kk == len
+                    for jj = (kk-1)*step+1:size(rbt.traj,2)
+                        plot(rbt.traj(1,jj:jj+1),rbt.traj(2,jj:jj+1), 'Color', color, 'LineWidth', 3);
+                    end
+                else
+                    if (kk*step > size(rbt.traj,2))
+                        for jj = (kk-1)*step+1:size(rbt.traj,2)-1
+                            plot(rbt.traj(1,jj:jj+1),rbt.traj(2,jj:jj+1), 'Color', color, 'LineWidth', 3);
+                        end
+                    else
+                        for jj = (kk-1)*step+1:kk*step
+                            plot(rbt.traj(1,jj:jj+1),rbt.traj(2,jj:jj+1), 'Color', color, 'LineWidth', 3);
+                        end
+                    end
+                end
+            end
         else
             len = size(rbt.traj,2)/21;
             step = 21;
-        end
-        for kk = 1:len
-            color = interp1(linspace(1, 200, size(cmap, 1)), cmap, kk);
-            if kk == len
-                for jj = (kk-1)*step+1:kk*step-1
-                    plot(rbt.traj(1,jj:jj+1),rbt.traj(2,jj:jj+1), 'Color', color, 'LineWidth', 3);
-                end
-            else
-                for jj = (kk-1)*step+1:kk*step
-                    plot(rbt.traj(1,jj:jj+1),rbt.traj(2,jj:jj+1), 'Color', color, 'LineWidth', 3);
+            for kk = 1:len
+                color = interp1(linspace(1, 200, size(cmap, 1)), cmap, kk);
+                if kk == len
+                    for jj = (kk-1)*step+1:kk*step-1
+                        plot(rbt.traj(1,jj:jj+1),rbt.traj(2,jj:jj+1), 'Color', color, 'LineWidth', 3);
+                    end
+                else
+                    for jj = (kk-1)*step+1:kk*step
+                        plot(rbt.traj(1,jj:jj+1),rbt.traj(2,jj:jj+1), 'Color', color, 'LineWidth', 3);
+                    end
                 end
             end
         end
+        %
+        
+
+        rbt.drawFOV(rbt.state,fld,'cur',[0.9290 0.6940 0.1250]);
+%         rbt.drawFOV_red(rbt.state,fld,'cur',[1 0 1]);
     
         plot(fld.target.traj(ii+1,1),fld.target.traj(ii+1,2),"pentagram",'Color',[0.13333 0.5451 0.13333],'MarkerFaceColor',[0.13333 0.5451 0.13333],MarkerSize=15);
         plot(rbt.state(1),rbt.state(2),'ro',MarkerFaceColor='r',MarkerSize=15);
 
-        rbt.drawFOV(rbt.state,fld,'cur',[0.9290 0.6940 0.1250]);
-        rbt.drawFOV_red(rbt.state,fld,'cur',[1 0 1]);
+        % start plot
+        %{
+        plot(fld.target.traj(1,1),fld.target.traj(1,2),"pentagram",'Color','k','MarkerFaceColor','k',MarkerSize=15);
+        plot(rbt.traj(1,1),rbt.traj(2,1),'ko',MarkerFaceColor='k',MarkerSize=15);
+        plot(fld.target.traj(1,1),fld.target.traj(1,2),"pentagram",'Color',[0.13333 0.5451 0.13333],'MarkerFaceColor',[0.13333 0.5451 0.13333],MarkerSize=8);
+        plot(rbt.traj(1,1),rbt.traj(2,1),'ro',MarkerFaceColor='r',MarkerSize=10);
+        %}
 
         xticks(0:10:50);
         xticklabels({'0','10','20','30','40','50'});
@@ -495,13 +533,21 @@ for ii = 1:sim_len
 
         drawnow limitrate
 
-        set(gcf,'position',[500,200,1080,720]);
+%         set(gcf,'position',[500,200,1300,800]);
+        set(gcf,'position',[500,200,800,800]);
+        set(gca,'FontSize',15,'FontName','Times New Roman');
+        xticks([]);
+        yticks([]);
+        title('');
+        xlabel('');
+        ylabel('');
         f = getframe(gcf);
-        imwrite(f.cdata, strcat('20240301_case',num2str(tt),'.png'));
-        pause(5)
+        imwrite(f.cdata, strcat('20240403_',plan_mode,num2str(tt),'.png'));
+        pause(1)
     end
     %}
 
+    %%
     clf
 
     % skip tracking

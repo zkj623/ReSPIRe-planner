@@ -32,8 +32,8 @@ classdef RobotClass
         pred;
 
         % for general nonlinear sensors
-        %h; % y=h(x)
-        %del_h; % gradient of h
+        h; % y=h(x)
+        del_h; % gradient of h
         R; % variance(1-d)/covariance(high-d) for sensor model
         mdim; % dimension of sensor measurement
 
@@ -123,8 +123,8 @@ classdef RobotClass
 
             % sensor specs
             this.R = inPara.R;
-            %this.h = inPara.h;
-            %this.del_h = inPara.del_h;
+            this.h = inPara.h;
+            this.del_h = inPara.del_h;
             this.theta0 = inPara.theta0;
             this.rmin = inPara.minrange;
             this.rmax = inPara.maxrange;
@@ -357,8 +357,8 @@ classdef RobotClass
             P = this.P;
 
             % sensor
-            %h = this.h;
-            %del_h = this.del_h;
+            h = this.h;
+            del_h = this.del_h;
             R = this.R;
 
             % prediction
@@ -398,7 +398,7 @@ classdef RobotClass
             end
             
             % sensor
-            %del_h = this.del_h;
+            del_h = this.del_h;
             
             % used for updating gmm component weights
             alp = ones(1,this.gmm_num);
@@ -485,9 +485,6 @@ classdef RobotClass
             else
                 Q = fld.target.Q_search;
             end
-            
-            % sensor
-            %del_h = this.del_h;
             
             % current estimation
             cell = zeros(size(this.cell,1),size(this.cell,2));
@@ -693,17 +690,30 @@ classdef RobotClass
             map.FreeThreshold = 0.55;
 
             % planning
+%             if is_tracking
+%                 v = 0.99;
+%             elseif first
+%                 if ii < 5
+%                     v = 1.5;
+%                 else
+%                     v = 3;
+%                 end
+%                 %v = 3;
+%             else
+%                 v = 1.8;
+%             end
+
             if is_tracking
-                v = 0.99;
+                %v = 0.79;
+                v = 0.1*(norm(this.est_pos-this.state(1:2))-3)+0.8;
             elseif first
                 if ii < 5
                     v = 1.5;
                 else
-                    v = 3;
+                    v = 2.2;
                 end
-                %v = 3;
             else
-                v = 1.8;
+                v = 1.5;
             end
    
            
@@ -743,7 +753,7 @@ classdef RobotClass
 
             if ~this.first&&~this.is_tracking
                 planner = plannerHybridAStar(sv, ...
-                    MinTurningRadius=0.8, ...
+                    MinTurningRadius=1.1, ...
                     MotionPrimitiveLength=1.0,ForwardCost=1,ReverseCost=1e6,InterpolationDistance=v/3);
             elseif this.is_tracking
                 planner = plannerHybridAStar(sv, ...
@@ -751,7 +761,7 @@ classdef RobotClass
                     MotionPrimitiveLength=3,ForwardCost=1,ReverseCost=1e6,InterpolationDistance=v/3);
             else
                 planner = plannerHybridAStar(sv, ...
-                    MinTurningRadius=1.3, ...
+                    MinTurningRadius=1.5, ...
                     MotionPrimitiveLength=1.5,ForwardCost=1,ReverseCost=1e6,InterpolationDistance=v/3);
             end
 
@@ -769,11 +779,12 @@ classdef RobotClass
                     this.planned_traj = path.States';
                 end
                 optz = this.planned_traj(:,4);
-                this.traj = [this.traj this.planned_traj(:,1:4)];
+                this.planned_traj = this.planned_traj(:,1:4);
+%                 this.traj = [this.traj this.planned_traj];
             else
                 this.planned_traj = this.state(1:3) + [0;0;pi/3];
                 optz = this.planned_traj;
-                this.traj = [this.traj this.planned_traj];
+%                 this.traj = [this.traj this.planned_traj];
             end
 
             %tree(ii,1:length(tree_tmp)) = tree_tmp;
@@ -914,7 +925,7 @@ classdef RobotClass
             else
                 p = ps{id};
             end
-            this.traj = [this.traj [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2]];
+%             this.traj = [this.traj [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2]];
             this.planned_traj = [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2];
             this.a_hist = id;
 
@@ -1035,7 +1046,7 @@ classdef RobotClass
             else
                 p = ps{id};
             end
-            this.traj = [this.traj [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2]];
+%             this.traj = [this.traj [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2]];
             this.planned_traj = [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2];
             this.a_hist = id;
 
@@ -1120,12 +1131,14 @@ classdef RobotClass
 
             % planning
             if is_tracking
-                v = 0.99;
+               % v = 0.99;
+                v = 0.79;
             elseif first
                 v = 3;
                 %v = 3;
             else
-                v = 1.8;
+                %v = 1.8;
+                v = 1.5;
             end
 
             if is_tracking
@@ -1510,7 +1523,7 @@ classdef RobotClass
             end
             %
             this.planned_traj = traj_tmp';
-            this.traj = [this.traj traj_tmp'];
+%             this.traj = [this.traj traj_tmp'];
 
             this.G = G;
             this.Pmax = Pmax;
@@ -1654,32 +1667,32 @@ classdef RobotClass
                 else
                     p = ps{id};
                 end
-                this.traj = [this.traj [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2]];
+%                 this.traj = [this.traj [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2]];
                 this.planned_traj = [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2];
                 this.a_hist = id;
 
                 %% planning horizon
-                for hor = 1:2
-                    if ~isempty(tree(opt).children)
-                        opt = tree(opt).children(1);
-                        if ~isempty(tree(opt).children)
-                            val = zeros(length(tree(opt).children),1);
-                            for jj = 1:length(tree(opt).children)
-                                val(jj) = tree(tree(opt).children(jj)).Q;
-                            end
-                            z = tree(opt).state;
-                            [~,maxid] = max(val);
-                            opt = tree(opt).children(maxid);
-                            id = tree(opt).a_num;
-                            if is_tracking
-                                p = pt{id};
-                            else
-                                p = ps{id};
-                            end
-                            this.planned_traj = [this.planned_traj [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2]];
-                        end
-                    end
-                end
+%                 for hor = 1:2
+%                     if ~isempty(tree(opt).children)
+%                         opt = tree(opt).children(1);
+%                         if ~isempty(tree(opt).children)
+%                             val = zeros(length(tree(opt).children),1);
+%                             for jj = 1:length(tree(opt).children)
+%                                 val(jj) = tree(tree(opt).children(jj)).Q;
+%                             end
+%                             z = tree(opt).state;
+%                             [~,maxid] = max(val);
+%                             opt = tree(opt).children(maxid);
+%                             id = tree(opt).a_num;
+%                             if is_tracking
+%                                 p = pt{id};
+%                             else
+%                                 p = ps{id};
+%                             end
+%                             this.planned_traj = [this.planned_traj [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'-pi/2]];
+%                         end
+%                     end
+%                 end
             end
             this.value_max = value_max;
 
@@ -2744,11 +2757,11 @@ classdef RobotClass
                 rmin = this.rmin;
                 rmax = this.rmax;
                 theta0 = this.theta0;
-                plot([z(1)+rmin*cos(z(3)+theta0/2),z(1)+rmax*cos(z(3)+theta0/2)],[z(2)+rmin*sin(z(3)+theta0/2),z(2)+rmax*sin(z(3)+theta0/2)],'Color',color,'LineStyle','--',LineWidth=2);
-                plot([z(1)+rmin*cos(z(3)-theta0/2),z(1)+rmax*cos(z(3)-theta0/2)],[z(2)+rmin*sin(z(3)-theta0/2),z(2)+rmax*sin(z(3)-theta0/2)],'Color',color,'LineStyle','--',LineWidth=2);
+                plot([z(1)+rmin*cos(z(3)+theta0/2),z(1)+rmax*cos(z(3)+theta0/2)],[z(2)+rmin*sin(z(3)+theta0/2),z(2)+rmax*sin(z(3)+theta0/2)],'Color',color,'LineStyle','-.',LineWidth=3);
+                plot([z(1)+rmin*cos(z(3)-theta0/2),z(1)+rmax*cos(z(3)-theta0/2)],[z(2)+rmin*sin(z(3)-theta0/2),z(2)+rmax*sin(z(3)-theta0/2)],'Color',color,'LineStyle','-.',LineWidth=3);
                 theta=linspace(z(3)-theta0/2,z(3)+theta0/2);
-                plot(z(1)+rmin*cos(theta),z(2)+rmin*sin(theta),'Color',color,'LineStyle','--',LineWidth=1);
-                plot(z(1)+rmax*cos(theta),z(2)+rmax*sin(theta),'Color',color,'LineStyle','--',LineWidth=1);
+                plot(z(1)+rmin*cos(theta),z(2)+rmin*sin(theta),'Color',color,'LineStyle','-.',LineWidth=3);
+                plot(z(1)+rmax*cos(theta),z(2)+rmax*sin(theta),'Color',color,'LineStyle','-.',LineWidth=3);
             end
 %             xlim([fld.fld_cor(1),fld.fld_cor(2)]);
 %             ylim([fld.fld_cor(3),fld.fld_cor(4)]);
@@ -2785,12 +2798,5 @@ classdef RobotClass
 
         end
 
-        function obs = h(this,x,z)
-            obs = [sqrt(sum((x(1:2,:)-z(1:2)).^2)+0.1);atan2(x(2,:)-z(2),x(1,:)-z(1))-z(3)];
-        end
-
-        function obs = del_h(this,x,z)
-            obs = [(x(1:2)-z(1:2))'/sqrt(sum((x(1:2,:)-z(1:2)).^2)+0.1); [-(x(2)-z(2))/sum((x(1:2,:)-z(1:2)).^2) (x(1)-z(1))/sum((x(1:2,:)-z(1:2)).^2)]]; % z is the robot state.
-        end
     end
 end

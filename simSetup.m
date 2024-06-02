@@ -5,8 +5,12 @@
 
 %% Simulation Setup
 importfile('structured_map.mat');
+% importfile('unstructured_map.mat');
 %importfile('ablation_study.mat'); % ablation study
-importfile('scenario.mat'); % comparison
+% importfile('scenario.mat'); % comparison
+importfile('structured_scenario_for_plot.mat'); % comparison
+% importfile('unstructured_scenario.mat'); % comparison
+% importfile('unstructured_scenario_for_plot.mat'); % comparison
 
 traj_rbt = cell(5,50);
 particles_all = cell(5,50,200);
@@ -136,7 +140,7 @@ inPara_rbt.state = [rbt_state(tt,:)';1];
 %inPara_rbt.state = [5;22;pi/2;1];
 
 %inPara_rbt.traj = inPara_rbt.state(1:3);
-inPara_rbt.traj = [];
+inPara_rbt.traj = rbt_state(tt,:)';
 inPara_rbt.planned_traj = [];
 % z(3) = pi/2;
 %[48;48;pi;1];
@@ -182,8 +186,8 @@ inPara_rbt.pred = 0;
 switch sensor_type 
     case 'rb'
         % range-bearing sensor
-        %inPara_rbt.h = @(x,z) [sqrt(sum((x(1:2,:)-z(1:2)).^2)+0.1);atan2(x(2,:)-z(2),x(1,:)-z(1))-z(3)];
-        %inPara_rbt.del_h = @(x,z) [(x(1:2)-z(1:2))'/sqrt(sum((x(1:2,:)-z(1:2)).^2)+0.1); [-(x(2)-z(2))/sum((x(1:2,:)-z(1:2)).^2) (x(1)-z(1))/sum((x(1:2,:)-z(1:2)).^2)]]; % z is the robot state.
+        inPara_rbt.h = @(x,z) [sqrt(sum((x(1:2,:)-z(1:2)).^2)+0.1);atan2(x(2,:)-z(2),x(1,:)-z(1))-z(3)];
+        inPara_rbt.del_h = @(x,z) [(x(1:2)-z(1:2))'/sqrt(sum((x(1:2,:)-z(1:2)).^2)+0.1); [-(x(2)-z(2))/sum((x(1:2,:)-z(1:2)).^2) (x(1)-z(1))/sum((x(1:2,:)-z(1:2)).^2)]]; % z is the robot state.
         inPara_rbt.R = [0.1 0;0 0.01];
         inPara_rbt.mdim = 2;
     case 'ran'
@@ -283,7 +287,7 @@ tspan = 0:0.05:1;
 a = zeros(5,7); % action space
 interpolated_points = zeros(7,2,3);
 ps = {};
-vel = 30;
+vel = 24;
 
 % vel = 5;
 inputs = [vel pi/4;vel pi/8;vel -pi/4;vel -pi/8;vel 0;0 pi/4;0 -pi/4];

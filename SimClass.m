@@ -51,7 +51,7 @@ classdef SimClass
         function plot_rbt_map(this,rbt,fld,tt,ii,plan_mode)
             % Plotting for particles
             hold on
-            set(gcf,'position',[600,200,1920,1080]);
+            set(gcf,'position',[0,50,2400,1200]);
 
             subplot(1,2,1);
             hold on
@@ -59,7 +59,7 @@ classdef SimClass
             show(fld.map.occ_map)
 
             %plot(rbt.particles(1,:),rbt.particles(2,:),'.','Color',[0 1 0.5]);
-            plot(rbt.est_pos(1),rbt.est_pos(2),"^",'Color','r','MarkerFaceColor','r',MarkerSize=15);
+%             plot(rbt.est_pos(1),rbt.est_pos(2),"^",'Color','r','MarkerFaceColor','r',MarkerSize=15);
 
             plot(fld.target.traj(1:ii+1,1),fld.target.traj(1:ii+1,2),'-','Color',[0.13333 0.5451 0.13333],LineWidth=3);
             plot(rbt.traj(1,1:end-1),rbt.traj(2,1:end-1),'-','Color','r',MarkerSize=0.1,LineWidth=3);
@@ -67,13 +67,19 @@ classdef SimClass
                 plot(rbt.planned_traj(1,1:end),rbt.planned_traj(2,1:end),'-','Color','g',MarkerSize=0.1,LineWidth=3);
             end
 
-            plot(fld.target.traj(ii+1,1),fld.target.traj(ii+1,2),"pentagram",'Color',[0.13333 0.5451 0.13333],'MarkerFaceColor',[0.13333 0.5451 0.13333],MarkerSize=15);
+            plot(fld.target.traj(ii+1,1),fld.target.traj(ii+1,2),"pentagram",'Color',[0 0 0],'MarkerFaceColor',[0.3010 0.7450 0.9330],MarkerSize=20,LineWidth=1.5);
             plot(rbt.state(1),rbt.state(2),'ro',MarkerFaceColor='r',MarkerSize=15);
 
             rbt.drawFOV(rbt.state,fld,'cur',[0.9290 0.6940 0.1250]);
-            rbt.drawFOV_red(rbt.state,fld,'cur',[1 0 1]);
+%             rbt.drawFOV_red(rbt.state,fld,'cur',[1 0 1]);
 
-            text(1,48,strcat('t=',num2str(ii)),"FontSize",20,"FontName",'Times New Roman');
+%             text(1,48,strcat('t=',num2str(ii)),"FontSize",20,"FontName",'Times New Roman');
+
+            ax = gca;
+            ax.XTick = [];
+            ax.YTick = [];
+            ax.LineWidth = 2.0;
+            ax.Box = "on";
 
             %%%%%%
 
@@ -88,7 +94,7 @@ classdef SimClass
 
             if strcmp(plan_mode,'GM-PHD-SAT')
                 plot(rbt.est_pos(1),rbt.est_pos(2),"^",'Color','r','MarkerFaceColor','r',MarkerSize=15);
-                plot(rbt.gmm_mu(1,:),rbt.gmm_mu(2,:),'x','Color',[0 1 0.5],MarkerSize=10);
+%                 plot(rbt.gmm_mu(1,:),rbt.gmm_mu(2,:),'x','Color',[0 1 0.5],MarkerSize=10);
 
                 %
                 % 使用 linspace 创建一个网格
@@ -115,7 +121,7 @@ classdef SimClass
                     Z_all = Z_all + rbt.gmm_w(jj)*Z{jj} ;
                 end
 
-                Z_all = Z_all*50;
+%                 Z_all = Z_all*50;
                 alpha_data = Z_all / max(Z_all(:));
 
                 % 绘制 PDF
@@ -123,7 +129,7 @@ classdef SimClass
                 % 创建一个颜色映射，使得小的值映射到白色
                 %colormap(flipud(gray));
                 colormap("jet");
-                clim([0, 50]);
+                clim([0, 1]);
 
                 % 绘制 3D 图
                 h = surf(X, Y, Z_all);
@@ -133,12 +139,14 @@ classdef SimClass
                 set(h, 'AlphaData', alpha_data, 'FaceAlpha', 'interp');
 
                 % 添加颜色条
-                colorbar;
+                c = colorbar('AxisLocation','out','Ticks',[0 0.5 1]);
+                c.Label.String = 'PDF';
+                c.FontSize = 15;
                 h.EdgeColor = 'none';
                 %surf(X, Y, Z_all);
                 zlim([0, 0.05]);
-                view(3);
-                view(-30, 45);
+%                 view(3);
+%                 view(-30, 45);
                 %camzoom(1.3);
                 %}
 
@@ -154,7 +162,7 @@ classdef SimClass
                 Z = reshape(Z, size(X));
                 %Z = Z';
 
-                Z = Z*50;
+%                 Z = Z*50;
                 alpha_data = Z / max(Z(:));
 
                 % 绘制 PDF
@@ -162,7 +170,7 @@ classdef SimClass
                 % 创建一个颜色映射，使得小的值映射到白色
                 %colormap(flipud(gray));
                 colormap("jet");
-                clim([0, 50]);
+                clim([0, 1]);
 
                 % 绘制 3D 图
                 h = surf(Y, X, Z);
@@ -172,58 +180,49 @@ classdef SimClass
                 set(h, 'AlphaData', alpha_data, 'FaceAlpha', 'interp');
 
                 % 添加颜色条
-                colorbar;
+                c = colorbar('AxisLocation','out','Ticks',[0 0.5 1]);
+                c.Label.String = 'PDF';
+                c.FontSize = 15;
                 h.EdgeColor = 'none';
                 %surf(X, Y, Z_all);
                 zlim([0, 0.05]);
-                view(3);
-                view(-30, 45);
+%                 view(3);
+%                 view(-30, 45);
                 %camzoom(1.3);
                 %}
             else
-                plot(rbt.particles(1,:),rbt.particles(2,:),'.','Color',[0 1 0.5]);
+                plot(rbt.particles(1,:),rbt.particles(2,:),'o',MarkerSize=6,MarkerEdgeColor=[0 0 0],MarkerFaceColor=[0 1 0.5],LineWidth=1);
 
-                if strcmp(plan_mode,'ASPIRe')
-                    plot(rbt.loc_par(1,:),rbt.loc_par(2,:),'.','Color',[0.9290 0.6940 0.1250]);
-                    if rbt.first
-                        for jj = 1:size(rbt.first_particles,2)
-                            plot(rbt.first_particles(1,jj),rbt.first_particles(2,jj),'.m',MarkerSize=ceil(100*rbt.first_w(jj)));
-                        end
-                    end
+                if strcmp(plan_mode,'ASPIRe') && rbt.is_tracking == 0
+                    plot(rbt.loc_par(1,:),rbt.loc_par(2,:),'o',MarkerSize=6,MarkerEdgeColor=[0 0 0],MarkerFaceColor=[1 0.8 0],LineWidth=1);
+
+%                     if rbt.first
+%                         for jj = 1:size(rbt.first_particles,2)
+%                             plot(rbt.first_particles(1,jj),rbt.first_particles(2,jj),'.m',MarkerSize=ceil(100*rbt.first_w(jj)));
+%                         end
+%                     end
+                else
+                    plot(-1,-1,'o',MarkerSize=8,MarkerEdgeColor=[0 0 0],MarkerFaceColor=[1 0.8 0],LineWidth=1.2);
                 end
                 plot(rbt.est_pos(1),rbt.est_pos(2),"^",'Color','r','MarkerFaceColor','r',MarkerSize=15);
             end
 
-            plot(rbt.traj(1,1:end-1),rbt.traj(2,1:end-1),'-','Color','r',MarkerSize=0.1,LineWidth=3);
+            plot(fld.target.traj(1:ii+1,1),fld.target.traj(1:ii+1,2),'-','Color',[0.3010 0.7450 0.9330],LineWidth=3);
+            plot(rbt.traj(1,1:end),rbt.traj(2,1:end),'-','Color','r',MarkerSize=0.1,LineWidth=3);
             %
             %}
-            if strcmp(plan_mode,'sampling')
-                Pmax = rbt.Pmax;
-                G = rbt.G;
-                for i = 2:length(Pmax)
-                    %plot(G.traj{Pmax(i),1}(1,1:end),G.traj{Pmax(i),1}(2,1:end),'color',[.25 .25 .25],MarkerSize=6,LineWidth=2);
-                    plot(G.traj{Pmax(i),1}(1:end,1),G.traj{Pmax(i),1}(1:end,2),'color',[.25 .25 .25],MarkerSize=6,LineWidth=2);
-                end
-            end
+%             if strcmp(plan_mode,'sampling')
+%                 Pmax = rbt.Pmax;
+%                 G = rbt.G;
+%                 for i = 2:length(Pmax)
+%                     %plot(G.traj{Pmax(i),1}(1,1:end),G.traj{Pmax(i),1}(2,1:end),'color',[.25 .25 .25],MarkerSize=6,LineWidth=2);
+%                     plot(G.traj{Pmax(i),1}(1:end,1),G.traj{Pmax(i),1}(1:end,2),'color',[.25 .25 .25],MarkerSize=6,LineWidth=2);
+%                 end
+%             end
 
-            if ~isempty(rbt.planned_traj)
-                plot(rbt.planned_traj(1,1:end),rbt.planned_traj(2,1:end),'-','Color','g',MarkerSize=0.1,LineWidth=3);
-            end
 
-            plot(fld.target.traj(ii+1,1),fld.target.traj(ii+1,2),"pentagram",'Color',[0.13333 0.5451 0.13333],'MarkerFaceColor',[0.13333 0.5451 0.13333],MarkerSize=15);
+            plot(fld.target.traj(ii+1,1),fld.target.traj(ii+1,2),"pentagram",'Color',[0 0 0],'MarkerFaceColor',[0.3010 0.7450 0.9330],MarkerSize=20,LineWidth=1.5);
             plot(rbt.state(1),rbt.state(2),'ro',MarkerFaceColor='r',MarkerSize=15);
-
-            %{
-            x = rbt.state(1);
-            y = rbt.state(2);
-            % 创建一个三角形的顶点
-            len = 1;
-            vertices = [x-len, y-len, 0; x+len, y-len, 0; x, y+len, 0];
-            % 创建一个三角形的面
-            faces = [1, 2, 3];
-            % 绘制三角形
-            patch('Vertices', vertices, 'Faces', faces, 'FaceColor', 'r');
-            %}
 
             %{
             for jj = 1:length(rbt.tree)
@@ -235,9 +234,9 @@ classdef SimClass
             %}
 
             rbt.drawFOV(rbt.state,fld,'cur',[0.9290 0.6940 0.1250]);
-            rbt.drawFOV_red(rbt.state,fld,'cur',[1 0 1]);
+%             rbt.drawFOV_red(rbt.state,fld,'cur',[1 0 1]);
 
-            text(rbt.state(1)-2,rbt.state(2)-2,num2str(rbt.value_max));
+%             text(rbt.state(1)-2,rbt.state(2)-2,num2str(rbt.value_max));
             %             axis equal;
             %             set(gca,'FontSize',40);
             %             box on;
@@ -248,12 +247,18 @@ classdef SimClass
             yticklabels({'0','10','20','30','40','50'});
             axis equal;
             axis([0,50,0,50]);
+            title('');
+            xlabel('');
+            ylabel('');
+%             legend({'particles','critical particles','estimation','robot trajectory','target','robot','FOV'},'Location','southwest');
+            legend({'particles','critical particles','estimation','target trajectory','robot trajectory','target','robot','FOV'},'Location','southeast');
 
             if strcmp(plan_mode,'GM-PHD-SAT')||strcmp(plan_mode,'Cell-MB-SWT')
                 zticks(0:10:50);
                 zticklabels({'0','0.2','0.4','0.6','0.8','1'});
                 axis([0,50,0,50,0,50]);
             end
+            set(gca,'FontSize',20,'FontName','Times New Roman');
             drawnow limitrate
         end
 
