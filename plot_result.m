@@ -198,7 +198,7 @@ ylim([-30, 170]);
 xticks([]);
 % xticks([0 5 10]);
 % xticklabels({'structured map','unstructured map'});
-set(gca,'FontSize',20,'FontName','Times New Roman'); %修改横坐标名称、字体
+set(gca,'FontSize',25,'FontName','Times New Roman'); %修改横坐标名称、字体
 set(gcf,'position',[100,400,1000,400]);
 % title('Search time difference');
 box on
@@ -250,7 +250,7 @@ end
 xticks([]);
 % xticks([0 5 10]);
 % xticklabels({'structured map','unstructured map'});
-set(gca,'FontSize',20,'FontName','Times New Roman'); %修改横坐标名称、字体
+set(gca,'FontSize',25,'FontName','Times New Roman'); %修改横坐标名称、字体
 set(gcf,'position',[100,400,1000,400]);
 % title('Loss rate');
 box on
@@ -303,7 +303,7 @@ ylim([0, 18]);
 xticks([]);
 % xticks([0 5 10]);
 % xticklabels({'structured map','unstructured map'});
-set(gca,'FontSize',20,'FontName','Times New Roman'); %修改横坐标名称、字体
+set(gca,'FontSize',25,'FontName','Times New Roman'); %修改横坐标名称、字体
 set(gcf,'position',[100,400,1000,400]);
 % title('Estimation error');
 box on
@@ -333,9 +333,10 @@ for ii = 1:7
 end
 
 xticks([]);
+yticks(0:0.1:0.4);
 % xticks([0 5 10]);
 % xticklabels({'structured map','unstructured map'});
-set(gca,'FontSize',20,'FontName','Times New Roman'); %修改横坐标名称、字体
+set(gca,'FontSize',25,'FontName','Times New Roman'); %修改横坐标名称、字体
 set(gca,'YTickLabelRotation',90);
 set(gcf,'position',[100,400,620,300]);
 % title('Computation time');
