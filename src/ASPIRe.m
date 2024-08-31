@@ -1,9 +1,14 @@
-% unknown map version
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Code for "ReSPIRe-Planner"
+% Simulation for target search and tracking in unknown environments
+% ver 1.0, Kangjie Zhou, 2024/3
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % clc 
 clear % clear global variables
 close all
 
+% Initialize arrays to store results
 t_search_all = [];
 loss_rate_all = [];
 est_err_all = [];
@@ -15,6 +20,7 @@ for i = 1:10
     error{i} = zeros(200,10);
 end
 
+% Loop over multiple simulations
 for zz = 1:5
 t_search = zeros(50,1);
 traj_length = zeros(50,1);
@@ -24,20 +30,19 @@ time_search = zeros(50,1);
 time_tracking = zeros(50,1);
 runtime = zeros(50,1);
 
-%rng(0)
-
-%for tt = [1 2 3 5 6 7 9] %1:50 %44 %47
+% Loop over different trials
 for tt = 1:10
 % for tt = 2
 
-% set up parameters
+% Setup simulation parameters
 simSetup;
 
+% Debugging: stop if an error occurs
 dbstop if error
+
 %% %%%%%%%%%%%%%%% Simulation %%%%%%%%%%%%%%% 
-% record the optimal solution of current time for warm starting ngPlanner
+% record the optimal solution of current time
 optz = [];
-optu = [];
 
 % save figures to video
 path = sprintf('../video/%s/',datetime('today'));
@@ -54,8 +59,8 @@ end
 
 list = repmat(Node_IMPFT,210,500);
 
+% Main simulation loop
 for ii = 1:sim_len
-    %fprintf('[main loop] gameSim.m, line %d, iteration %d, Progress: %d\n',MFileLineNr(),ii,ii/sim_len)
 
 %     tic
 
@@ -65,13 +70,17 @@ for ii = 1:sim_len
     fld.target.traj = [fld.target.traj;fld.target.pos'];
 
     %% target position estimation
+
+    % Sensor measurement generation
     rbt.y = rbt.sensorGen(fld);
 
+    % Lidar simulation
     lidarnum = 60;
     ranges = zeros(lidarnum,1);
     angles = linspace(-pi/4,pi/4,lidarnum);
     maxrange = rbt.rmax;
 
+    % Calculate ray intersections
     intsectionPts = rayIntersection(fld.map.occ_map,rbt.state(1:3)',angles,maxrange,0.8);
 
     for jj = 1:size(intsectionPts,1)
@@ -90,14 +99,15 @@ for ii = 1:sim_len
 
     scan = lidarScan(ranges,angles);
 
+    % Update occupancy map
     for jj = 1:5
-    insertRay(rbt.map.occ_map,rbt.state(1:3)',scan,maxrange);
+        insertRay(rbt.map.occ_map,rbt.state(1:3)',scan,maxrange);
     end
 
     %show(rbt.map.occ_map)
 
+    % Update robot's map
     rbt.map.region = occupancyMatrix(rbt.map.occ_map);
-
     region_tmp = rbt.map.region';
     region1 = zeros(250,250);
 
@@ -120,9 +130,8 @@ for ii = 1:sim_len
     end
     rbt.map.region_exp = 1-region1;
 
+    % Check if target is in field of view
     rbt.is_tracking = 0;
-    %rbt.inFOV(rbt.state,fld.target.pos)
-    %if rbt.inFOV(rbt.state,fld.target.pos)&&fld.map.V(ceil(rbt.state(1)),ceil(rbt.state(2)),ceil(fld.target.pos(1)),ceil(fld.target.pos(2)))
     if rbt.y(1) ~= -100
         rbt.is_tracking = 1;
         rbt.N = 50;
@@ -133,7 +142,7 @@ for ii = 1:sim_len
         rbt.first = 0;
     end
 
-    %% estimation
+    %% Estimation
     if strcmp(plan_mode,'GM-PHD-SAT')
         [rbt.gmm_w,rbt.gmm_mu,rbt.gmm_P] = rbt.GM_PHD(fld,sim,tt,ii,rbt.state,rbt.y);
         rbt.est_pos = rbt.gmm_mu*rbt.gmm_w';
@@ -149,28 +158,6 @@ for ii = 1:sim_len
         end
     else
         % particle filtering
-
-        % prediction
-        %{
-    if rbt.pred == 0
-        vis_len = length(find(rbt.inFOV_hist==1));
-        if vis_len > 4
-            rbt.pred = 1;
-        end
-    end
-    if rbt.pred
-        %vel = zeros(3,1);
-        %vel(1) = [this.state(1)+y(1)*cos(y(2)+state(3));state(2)+y(1)*sin(y(2)+state(3))];
-        %{
-        vel = [rbt.est_pos_hist(:,end)-rbt.est_pos_hist(:,end-1) rbt.est_pos_hist(:,end-1)-rbt.est_pos_hist(:,end-2) rbt.est_pos_hist(:,end-2)-rbt.est_pos_hist(:,end-3)];
-        accel = [vel(:,1)-vel(:,2) vel(:,2)-vel(:,3)];
-        trend = (accel(:,1) + accel(:,2))/2;
-        %}
-        vel = [rbt.est_pos_hist(:,end)-rbt.est_pos_hist(:,end-1) rbt.est_pos_hist(:,end-1)-rbt.est_pos_hist(:,end-2)];
-        accel = vel(:,1)-vel(:,2);
-        rbt.particles = rbt.particles + accel + vel(1);
-    end
-        %}
         [rbt.particles,rbt.w] = rbt.PF(fld,sim,tt,ii,rbt.state,rbt.particles,rbt.w,rbt.y,1);
         rbt.est_pos = rbt.particles*rbt.w';
     end
@@ -274,7 +261,7 @@ for ii = 1:sim_len
         end
         %}
 
-        %
+        % Determine critical particle
         flg = 0;
         idx = ceil(rbt.vir_tar(1)/grid_size);
         idy = ceil(rbt.vir_tar(2)/grid_size);
@@ -290,8 +277,6 @@ for ii = 1:sim_len
 
         if flg == 0
             dist_all = vecnorm(rbt.state(1:2)-rbt.first_particles(1:2,:));
-%             dist_all = dist_all.*exp(-w);
-            %     dist_all = dist_all.*exp(w);
             [dist_sort,I] = sort(dist_all);
             w = w(I);
             for jj = 1:size(dist_sort,2)
@@ -388,14 +373,15 @@ for ii = 1:sim_len
 
     %}
 
-    % draw plot
+    % Plot simulation results
     sim.plot_rbt_map(rbt,fld,tt,ii,plan_mode);
     %pause(0.2);
 
+    % Update robot state
     rbt.state = optz;
     rbt.traj = [rbt.traj rbt.planned_traj];
 
-    %
+    % Collision check
     if ii > 1
         wrong = 0;
         %

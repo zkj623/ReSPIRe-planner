@@ -1,6 +1,6 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Class for the mobile robot
-% ver 1.0, Kangjie Zhou, 2023/9
+% ver 1.0, Kangjie Zhou, 2024/3
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 classdef RobotClass
@@ -1553,6 +1553,7 @@ classdef RobotClass
             is_tracking = this.is_tracking;
             first = this.first;
 
+            % Determine motion primitives based on different modes
             if ~is_tracking
                 a = this.a_S;
                 interpolated_points = this.int_pts_S;
@@ -1563,9 +1564,10 @@ classdef RobotClass
            
             tree = [];
             root = Node_IMPFT;
-            %Initialization
+
+            % Root node initialization
             root.num = 1;
-            root.state = this.state;%匀速运动v=1
+            root.state = this.state;
             root.hist = [];
             root.a = a;
 
@@ -1594,17 +1596,15 @@ classdef RobotClass
             tree = [tree,root];
             this.allstate = [];
 
+            % Maximum tree depth (Planning horizon)
             if is_tracking
                 max_depth = 4;
             else
                 max_depth = 10;
             end
-            %discount factor
-            if is_tracking
-                eta = 0.95;
-            else
-                eta = 0.95;
-            end
+
+            eta = 0.95;
+
             num = 1;% addtion point index
 
             if is_tracking
@@ -1617,6 +1617,7 @@ classdef RobotClass
             B = this.particles;
             w = this.w;
             %}
+            % Whether use local particles
             %
             if ~this.is_tracking
                 B = this.loc_par2;
@@ -1641,14 +1642,13 @@ classdef RobotClass
             %
             while num < 100
                 [this,tree,Reward,num] = this.simulate(fld,sim,1,num,tree,max_depth,eta,ii+1,tt,interpolated_points,a,B,w,pt,ps,flag);
-                %num
+                % 'num' is the number of tree nodes 
             end
             %}
 
             this.tree = tree;
             this.planned_traj = [];
 
-            max_value = -10000;
             if isempty(tree(1).children)
                 optz = this.state;
             else
@@ -1717,8 +1717,7 @@ classdef RobotClass
                 z = tree_tmp(begin).state(1:3);
 
                 tree_tmp(begin).N = tree_tmp(begin).N+1;
-                %if length(tree_tmp(begin).children) == tree_tmp(begin).children_maxnum
-                if isempty(tree_tmp(begin).a)
+                if isempty(tree_tmp(begin).a) % No candidate action, choose the best child node
                     if ~isempty(tree_tmp(begin).children)
                         [begin,tree_tmp] = this.best_child(begin,0.732,tree_tmp);
                     else
@@ -1730,7 +1729,7 @@ classdef RobotClass
                         Reward = -100;
                         return
                     end
-                else
+                else % sample an action from action space to expand new node
                     num = num + 1;
                     [this,tree_tmp,begin,flag2] = this.expand(sim,begin,num,tree_tmp,0,1,interpolated_points,a,pt,ps);
                     if flag2 == 0
@@ -1793,6 +1792,7 @@ classdef RobotClass
                 num_a = begin;
                 tree_tmp(num_a).N = tree_tmp(num_a).N+1;
 
+                % target belief (particles) prediction based on target dynamics
                 %{
                 t = 1;
                 B(1:2,:) = B(1:2,:) + [control(1).*cos(B(3,:))*t;control(1).*sin(B(3,:))*t];
@@ -1806,22 +1806,7 @@ classdef RobotClass
                     B = (mvnrnd(B',fld.target.Q_search))';
                 end
 
-                % feasible particles
-                %{
-                jj = 1;
-                for ii = 1:size(B,2)
-                    if any([1;1] > B(1:2,jj))||any([49;49] < B(1:2,jj))||this.map.region_exp(ceil(B(1,jj)),ceil(B(2,jj))) < 0.3
-                        B(:,jj) = [];
-                        w(jj) = [];
-                        continue
-                    end
-                    jj = jj+1;
-                end
-                w = w./sum(w);
-                N = size(B,2);
-                %}
-
-                %
+                % Feasible particles
                 for jj = 1:size(B,2)
                     if any([1;1] > B(1:2,jj))||any([49;49] < B(1:2,jj))||this.map.region_exp(ceil(B(1,jj)*5),ceil(B(2,jj)*5)) < 0.45
                         w(jj) = 0;
@@ -1830,6 +1815,7 @@ classdef RobotClass
                 w = w./sum(w);
                 N = size(B,2);
 
+                % Resampling particles
                 M = 1/N;
                 U = rand(1)*M;
                 new_particles = zeros(2,N);
@@ -1851,6 +1837,8 @@ classdef RobotClass
                 state_estimation = B*w';
 
                 state = tree_tmp(num_a).state;
+
+                % Reward calculation
                 if this.is_tracking
                     reward = MI(this,fld,sim,tree_tmp(num_a).state,B,w);% + MI(this,fld,sim,tree_tmp(num_a).inter_state,B,w);
                 else
@@ -1864,10 +1852,10 @@ classdef RobotClass
                 %reward = reward + 0.2*(mindist-norm(state(1:2)-this.first_particles(1:2,id)));
                 %}
 
-                % immediate reward (to be modified)
+                % immediate reward
                 tree_tmp(num_a).R = reward;
 
-
+                % Progressive widening
                 if length(tree_tmp(begin).children) <= K*(tree_tmp(begin).N^alpha)
                     %{
                     B_tmp = B;
@@ -1929,9 +1917,11 @@ classdef RobotClass
                 num_o = begin;
 
                 B_pre = B;
-                if o(1)~=-100%这里如果不走PF可能会出现infeasible的粒子
+                if o(1)~=-100 % 这里如果不走PF可能会出现infeasible的粒子
                     [B,w] = this.PF(fld,sim,tt,simIndex,tree_tmp(num_a).state(:,1),B,w,o,0);
                 end
+
+                % Rollout for new node
                 if flag == 1
                     node = tree_tmp(begin);
                     if this.is_tracking %%% tracking case
@@ -2113,6 +2103,7 @@ classdef RobotClass
                     [this,tree_tmp,Reward,num] = this.simulate(fld,sim,begin,num,tree_tmp,depth-1,eta,simIndex,tt,interpolated_points,a,B,w,pt,ps,flg);
                     Reward = reward + eta*Reward;
                 end
+                % Backpropagation
                 tree_tmp(num_o).N = tree_tmp(num_o).N + 1;
                 tree_tmp(num_a).Q = tree_tmp(num_a).Q + (Reward-tree_tmp(num_a).Q)/tree_tmp(num_a).N;
             end
@@ -2204,7 +2195,7 @@ classdef RobotClass
             flag2 = 1;
             node = tree_tmp(begin);
             state = zeros(4,1);
-            if tmp == 1 %action
+            if tmp == 1 % action node
                 %
                 ii = randperm(size(tree_tmp(begin).a,2),1);
                 action = tree_tmp(begin).a(:,ii);
@@ -2306,7 +2297,7 @@ classdef RobotClass
                 end
                 new.hist = [node.hist,hist];
                 new.a = a;
-            else % observation
+            else % observation node
                 new = node;
                 new.a = a;
 
@@ -2368,6 +2359,7 @@ classdef RobotClass
                 B_tmp1 = B;
                 N = size(B,2);
 
+                % Remove infeasible particles
                 flag1 = ~any(zeros(2,N)>B_tmp1(1:2,:));
                 flag2 = ~any(50*ones(2,N)<B_tmp1(1:2,:));
                 flag = flag1.*flag2;
@@ -2381,6 +2373,7 @@ classdef RobotClass
                     return
                 end
 
+                % Resampling
                 B_tmp2 = zeros(2,N);
                 B_tmp2(:,1:size(B_tmp1,2)) = B_tmp1;
                 for jj = size(B_tmp1,2)+1:N
@@ -2437,7 +2430,8 @@ classdef RobotClass
                         state(3) = node.state(3)+action(3);
                         state(4) = action(4);
 
-                        % 判断motion primitives中的多个点
+                        % 判断motion primitives可行性
+                        % 判断多个点
                         %
                         id = action(5);
 
@@ -2471,7 +2465,7 @@ classdef RobotClass
                         end
                         %}
 
-                        % 只判断motion primitives的终点
+                        % 只判断终点
                         %{
                         if any([0;0] >= state(1:2))||any([50;50] <= state(1:2))||this.map.region_exp(ceil(state(1)),ceil(state(2))) < 0.3||fld.map.V(ceil(node.state(1)),ceil(node.state(2)),ceil(state(1)),ceil(state(2))) == 0||state(4)<0%||state(4)>5
                             continue
@@ -2516,6 +2510,7 @@ classdef RobotClass
                         %
                         reward = MI(this,fld,sim,node.state,B,w);
 
+                        % heuristic reward
                         reward = 3*exp(-norm(node.state(1:2)-target));
                         %{
                         if ~this.first
@@ -2525,20 +2520,10 @@ classdef RobotClass
                         %}
                         %reward = MI(this,fld,sim,node.state,B,w) + exp(-norm(node.state(1:2)-target));
 
-                        %{
-                        if this.inFOV(this.map.occ_map,node.state,target(1:2),1)
-                            reward = reward + 3*(depth-1);
-                            return
-                        end
-                        %}
-                        %{
-                        if mindis < 2
-                            reward = reward + 3;
-                        end
-                        %}
                     end
                 end
 
+                % debug use
                 %{
                 if ~this.is_tracking
                     sim.plotSim(this,fld,state,B,tt,simIndex);
@@ -2551,7 +2536,7 @@ classdef RobotClass
             end
         end
 
-        %% objective function
+        %% objective function (Mutual information calculation)
         
         function reward = MI(this,fld,sim,state,particles,w)
             %
@@ -2563,7 +2548,6 @@ classdef RobotClass
             R = this.R;
             H_cond = 0;
             H0 = 0.5*size(R,1)*(log(2*pi)+1)+0.5*log(det(R));
-            %H0 = 0.5*(log(2*pi)+1)+0.5*log(det(R));
             N = size(particles,2);
 
             if this.is_tracking
