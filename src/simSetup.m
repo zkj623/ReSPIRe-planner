@@ -17,14 +17,13 @@ particles_all = cell(5,50,200);
 est_all = cell(5,50,200);
 obs_all = cell(5,50,200);
 
-% addpath('C:\Program Files\MATLAB\cvx\functions\vec_') % some issue occurs when vec function is called (in my code, it happens when using log_det)
 scale = 0.5; % scale the size of the field
 %set(0,'DefaultFigureWindowStyle','docked');% docked
 set(0,'DefaultFigureWindowStyle','normal');
 
 sim_len = 200; % simulation duration
 dt = 1;
-plan_mode = 'sampling'; % choose the mode of simulation: NBV, sampling, ASPIRe, GM-PHD-SAT, Cell-MB-SWT
+plan_mode = 'ASPIRe'; % choose the mode of simulation: NBV, sampling, ASPIRe, GM-PHD-SAT, Cell-MB-SWT
 
 % parameter for target motion model: 
 % 'static', 'lin'(ear), 'cir'(cular), 'sin'(usoidal), 'ped'(estrian)

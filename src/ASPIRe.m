@@ -573,11 +573,6 @@ for ii = 1:sim_len
     %}
 end
 
-%     if ii == 166
-%     ax = gca;
-%     exportgraphics(ax,strcat('sim_0828_multi',num2str(ii),'.png'));
-%     end
-
 traj_rbt{zz,tt} = rbt.traj;
 % 
 if save_video
